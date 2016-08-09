@@ -361,6 +361,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
                 sub_share, mnt_path = self._get_subshare_mount_point(nfs_share,
                                                                      volume)
                 self._ensure_share_mounted(sub_share, mnt_path)
+                self._get_capacity_info(nfs_share)
         except nexenta.NexentaException as exc:
             try:
                 nms.folder.destroy('%s/%s' % (vol, folder))
@@ -471,7 +472,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
                                    'already deleted.'), origin)
                         return
                     raise
-        self._get_capacity_info()
+        self._get_capacity_info(nfs_share)
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
