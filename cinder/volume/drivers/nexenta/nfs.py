@@ -30,7 +30,7 @@ from cinder import context
 from cinder import db
 from cinder import exception
 from cinder.openstack.common import log as logging
-from cinder.openstack.common import units
+from cinder import units
 from cinder.volume.drivers import nexenta
 from cinder.volume.drivers.nexenta import jsonrpc
 from cinder.volume.drivers.nexenta import options
