@@ -147,19 +147,17 @@ class TestNexentaISCSIDriver(test.TestCase):
             'volumeSize': 2 * units.Gi})
 
     def test_delete_snapshot(self):
-        self.drv.collect_zfs_garbage = lambda x: None
         self._create_volume_db_entry()
         url = ('storage/pools/pool/volumeGroups/dsg/'
                'volumes/volume-1/snapshots/snapshot1')
 
-        self.nef_mock.delete.side_effect = exception.NexentaException(
-            'Failed to destroy snapshot')
+        self.nef_mock.delete.side_effect = exception.NexentaException('EBUSY')
         self.drv.delete_snapshot(self.TEST_SNAPSHOT_REF)
         self.nef_mock.delete.assert_called_with(url)
 
         self.nef_mock.delete.side_effect = exception.NexentaException('Error')
-        self.assertRaises(exception.NexentaException,
-                          self.drv.delete_snapshot, self.TEST_SNAPSHOT_REF)
+        self.drv.delete_snapshot(self.TEST_SNAPSHOT_REF)
+        self.nef_mock.delete.assert_called_with(url)
 
     @patch('cinder.volume.drivers.nexenta.ns5.iscsi.'
            'NexentaISCSIDriver.create_snapshot')
