@@ -134,9 +134,7 @@ class TestNexentaNfsDriver(test.TestCase):
 
     @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
            'NexentaNfsDriver._ensure_share_mounted')
-    @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
-           'NexentaNfsDriver.collect_zfs_garbage')
-    def test_delete_volume(self, ensure, collect):
+    def test_delete_volume(self, ensure):
         self._create_volume_db_entry()
         self.nef_mock.get.return_value = {}
         self.drv.delete_volume(self.TEST_VOLUME)
@@ -150,9 +148,7 @@ class TestNexentaNfsDriver(test.TestCase):
         data = {'name': self.TEST_SNAPSHOT['name']}
         self.nef_mock.post.assert_called_with(url, data)
 
-    @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
-           'NexentaNfsDriver.collect_zfs_garbage')
-    def test_delete_snapshot(self, collect):
+    def test_delete_snapshot(self):
         self._create_volume_db_entry()
         self.drv.delete_snapshot(self.TEST_SNAPSHOT)
         url = ('storage/pools/pool/filesystems/share%2Fvolume-1/'
@@ -160,8 +156,6 @@ class TestNexentaNfsDriver(test.TestCase):
         self.drv.delete_snapshot(self.TEST_SNAPSHOT)
         self.nef_mock.delete.assert_called_with(url)
 
-    @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
-           'NexentaNfsDriver.extend_volume')
     @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
            'NexentaNfsDriver.local_path')
     @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
@@ -179,9 +173,6 @@ class TestNexentaNfsDriver(test.TestCase):
         self.drv.create_volume_from_snapshot(
             self.TEST_VOLUME2, self.TEST_SNAPSHOT)
         self.nef_mock.post.assert_called_with(url, data)
-
-        # make sure the volume get extended!
-        extend.assert_called_once_with(self.TEST_VOLUME2, 2)
 
     @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
            'NexentaNfsDriver.local_path')
