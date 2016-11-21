@@ -189,6 +189,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
+
         :param volume: volume reference
         :param new_size: volume new size in GB
         """
