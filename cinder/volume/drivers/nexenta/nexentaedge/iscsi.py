@@ -239,6 +239,11 @@ class NexentaEdgeISCSIDriver(driver.ISCSIDriver):
                 'snapName': snapshot['name']
             })
 
+    @staticmethod
+    def _get_clone_snapshot_name(volume):
+        """Return name for snapshot that will be used to clone the volume."""
+        return 'cinder-clone-snapshot-%(id)s' % volume
+
     def create_cloned_volume(self, volume, src_vref):
         """
         vol_url = (self.bucket_url + '/objects/' +
