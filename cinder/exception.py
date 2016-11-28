@@ -720,3 +720,7 @@ class BrocadeZoningCliException(CinderException):
 
 class NetAppDriverException(VolumeDriverException):
     message = _("NetApp Cinder Driver exception.")
+
+
+class NexentaException(NotFound):
+    message = _("Nexenta Cinder Driver exception.")
