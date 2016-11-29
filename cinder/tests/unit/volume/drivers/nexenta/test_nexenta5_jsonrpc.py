@@ -94,10 +94,10 @@ class TestNexentaJSONProxyAuth(test.TestCase):
                           adapter)
 
         # successful authorization
-        self.assertEqual(nef.get(rnd_url), {'data': []})
+        self.assertEqual({'data': []}, nef.get(rnd_url))
 
         # session timeout simulation. Client must authenticate newly
-        self.assertEqual(nef.get(rnd_url), {'data': []})
+        self.assertEqual({'data': []}, nef.get(rnd_url))
         # auth URL mast be requested two times at this moment
         self.assertEqual(2, post.call_count)
 
@@ -131,35 +131,35 @@ class TestNexentaJSONProxy(test.TestCase):
         rnd_url = 'some/random/url'
         self.nef.session.mount('{}://{}:{}/{}'.format(
             'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
-        self.assertEqual(self.nef.post(rnd_url), random_dict)
+        self.assertEqual(random_dict, self.nef.post(rnd_url))
 
     def test_delete(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
         self.nef.session.mount('{}://{}:{}/{}'.format(
             'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
-        self.assertEqual(self.nef.delete(rnd_url), random_dict)
+        self.assertEqual(random_dict, self.nef.delete(rnd_url))
 
     def test_put(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
         self.nef.session.mount('{}://{}:{}/{}'.format(
             'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
-        self.assertEqual(self.nef.put(rnd_url), random_dict)
+        self.assertEqual(random_dict, self.nef.put(rnd_url))
 
     def test_get_200(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
         self.nef.session.mount('{}://{}:{}/{}'.format(
             'http', HOST, 8080, rnd_url), self.gen_adapter(200, random_dict))
-        self.assertEqual(self.nef.get(rnd_url), random_dict)
+        self.assertEqual(random_dict, self.nef.get(rnd_url))
 
     def test_get_201(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
         self.nef.session.mount('{}://{}:{}/{}'.format(
             'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
-        self.assertEqual(self.nef.get(rnd_url), random_dict)
+        self.assertEqual(random_dict, self.nef.get(rnd_url))
 
     def test_get_500(self):
         class TestAdapter(adapters.HTTPAdapter):

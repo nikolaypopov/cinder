@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import uuid
+
 from oslo_log import log as logging
 from oslo_utils import units
 
@@ -25,7 +27,6 @@ from cinder.volume import driver
 from cinder.volume.drivers.nexenta.ns5 import jsonrpc
 from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
-import uuid
 
 VERSION = '1.1.0'
 LOG = logging.getLogger(__name__)
@@ -37,9 +38,9 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
     """Executes volume driver commands on Nexenta Appliance.
 
     Version history:
+        1.0.0 - Initial driver version.
         1.1.0 - Added HTTPS support.
                 Added use of sessions for REST calls.
-        1.0.0 - Initial driver version.
     """
 
     VERSION = VERSION

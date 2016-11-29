@@ -13,25 +13,19 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import json
 import requests
 import time
 
 from oslo_log import log as logging
+from oslo_serialization import jsonutils
 
 from cinder import exception
 from cinder.i18n import _
 from cinder.utils import retry
-from oslo_serialization import jsonutils
 from requests.cookies import extract_cookies_to_jar
-from requests.packages.urllib3 import exceptions
 
 LOG = logging.getLogger(__name__)
 TIMEOUT = 60
-
-requests.packages.urllib3.disable_warnings(exceptions.InsecureRequestWarning)
-requests.packages.urllib3.disable_warnings(
-    exceptions.InsecurePlatformWarning)
 
 
 def check_error(response):
@@ -83,7 +77,7 @@ class RESTCaller(object):
 
         response = getattr(self.__proxy.session, self.__method)(url, **kwargs)
         check_error(response)
-        content = json.loads(response.content) if response.content else None
+        content = jsonutils.loads(response.content) if response.content else None
         LOG.debug("Got response: %(code)s %(reason)s %(content)s", {
             'code': response.status_code,
             'reason': response.reason,
