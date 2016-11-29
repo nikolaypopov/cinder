@@ -77,7 +77,8 @@ class RESTCaller(object):
 
         response = getattr(self.__proxy.session, self.__method)(url, **kwargs)
         check_error(response)
-        content = jsonutils.loads(response.content) if response.content else None
+        content = (jsonutils.loads(response.content)
+                   if response.content else None)
         LOG.debug("Got response: %(code)s %(reason)s %(content)s", {
             'code': response.status_code,
             'reason': response.reason,
