@@ -20,12 +20,13 @@ import mock
 import requests
 import uuid
 
-from cinder import exception
-from cinder import test
-from cinder.volume.drivers.nexenta.ns5 import jsonrpc
 from mock import patch
 from oslo_serialization import jsonutils
 from requests import adapters
+
+from cinder import exception
+from cinder import test
+from cinder.volume.drivers.nexenta.ns5 import jsonrpc
 
 HOST = '1.1.1.1'
 USERNAME = 'user'
@@ -98,7 +99,7 @@ class TestNexentaJSONProxyAuth(test.TestCase):
 
         # session timeout simulation. Client must authenticate newly
         self.assertEqual({'data': []}, nef.get(rnd_url))
-        # auth URL mast be requested two times at this moment
+        # auth URL must be requested two times at this moment
         self.assertEqual(2, post.call_count)
 
         # continue with the last (second) token

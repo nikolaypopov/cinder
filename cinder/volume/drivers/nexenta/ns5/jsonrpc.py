@@ -22,7 +22,6 @@ from oslo_serialization import jsonutils
 from cinder import exception
 from cinder.i18n import _
 from cinder.utils import retry
-from requests.cookies import extract_cookies_to_jar
 
 LOG = logging.getLogger(__name__)
 TIMEOUT = 60
@@ -127,7 +126,8 @@ class HTTPSAuth(requests.auth.AuthBase):
             r.content
             r.close()
             prep = r.request.copy()
-            extract_cookies_to_jar(prep._cookies, r.request, r.raw)
+            requests.cookies.extract_cookies_to_jar(
+                prep._cookies, r.request, r.raw)
             prep.prepare_cookies(prep._cookies)
 
             prep.headers['Authorization'] = 'Bearer %s' % self.token
