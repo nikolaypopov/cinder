@@ -19,9 +19,9 @@ Unit tests for NexentaStor 5 REST API helper
 import uuid
 
 import mock
-import requests
 from mock import patch
 from oslo_serialization import jsonutils
+import requests
 from requests import adapters
 
 from cinder import exception
