@@ -16,10 +16,10 @@
 Unit tests for NexentaStor 5 REST API helper
 """
 
-import mock
-import requests
 import uuid
 
+import mock
+import requests
 from mock import patch
 from oslo_serialization import jsonutils
 from requests import adapters
@@ -58,8 +58,11 @@ class TestNexentaJSONProxyAuth(test.TestCase):
         class PostSideEffect(object):
             def __call__(self, *args, **kwargs):
                 r = gen_response()
-                if args[0] == '{}://{}:{}/{}'.format(
-                        'https', HOST, port, auth_uri):
+                if args[0] == '%(scheme)s://%(host)s:%(port)s/%(uri)s' % {
+                        'scheme': 'https',
+                        'host': HOST,
+                        'port': port,
+                        'uri': auth_uri}:
                     token = uuid.uuid4().hex
                     content = {'token': token}
                     r._content = jsonutils.dumps(content)
@@ -91,8 +94,13 @@ class TestNexentaJSONProxyAuth(test.TestCase):
         nef = jsonrpc.NexentaJSONProxy(HOST, port, USERNAME, PASSWORD,
                                        use_https)
         adapter = TestAdapter()
-        nef.session.mount('{}://{}:{}/{}'.format('https', HOST, port, rnd_url),
-                          adapter)
+        nef.session.mount(
+            '%(scheme)s://%(host)s:%(port)s/%(uri)s' % {
+                'scheme': 'https',
+                'host': HOST,
+                'port': port,
+                'uri': rnd_url},
+            adapter)
 
         # successful authorization
         self.assertEqual({'data': []}, nef.get(rnd_url))
@@ -127,39 +135,43 @@ class TestNexentaJSONProxy(test.TestCase):
 
         return TestAdapter()
 
+    def _mount_adapter(self, url, adapter):
+        self.nef.session.mount(
+            '%(scheme)s://%(host)s:%(port)s/%(uri)s' % {
+                'scheme': 'http',
+                'host': HOST,
+                'port': 8080,
+                'uri': url},
+            adapter)
+
     def test_post(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
+        self._mount_adapter(rnd_url, self.gen_adapter(201, random_dict))
         self.assertEqual(random_dict, self.nef.post(rnd_url))
 
     def test_delete(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
+        self._mount_adapter(rnd_url, self.gen_adapter(201, random_dict))
         self.assertEqual(random_dict, self.nef.delete(rnd_url))
 
     def test_put(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
+        self._mount_adapter(rnd_url, self.gen_adapter(201, random_dict))
         self.assertEqual(random_dict, self.nef.put(rnd_url))
 
     def test_get_200(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), self.gen_adapter(200, random_dict))
+        self._mount_adapter(rnd_url, self.gen_adapter(200, random_dict))
         self.assertEqual(random_dict, self.nef.get(rnd_url))
 
     def test_get_201(self):
         random_dict = {'data': uuid.uuid4().hex}
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), self.gen_adapter(201, random_dict))
+        self._mount_adapter(rnd_url, self.gen_adapter(201, random_dict))
         self.assertEqual(random_dict, self.nef.get(rnd_url))
 
     def test_get_500(self):
@@ -179,8 +191,7 @@ class TestNexentaJSONProxy(test.TestCase):
 
         adapter = TestAdapter()
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), adapter)
+        self._mount_adapter(rnd_url, adapter)
         self.assertRaises(exception.NexentaException, self.nef.get, rnd_url)
 
     def test_get__not_nef_error(self):
@@ -197,8 +208,7 @@ class TestNexentaJSONProxy(test.TestCase):
 
         adapter = TestAdapter()
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), adapter)
+        self._mount_adapter(rnd_url, adapter)
         self.assertRaises(exception.VolumeBackendAPIException, self.nef.get,
                           rnd_url)
 
@@ -215,8 +225,7 @@ class TestNexentaJSONProxy(test.TestCase):
 
         adapter = TestAdapter()
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), adapter)
+        self._mount_adapter(rnd_url, adapter)
         self.assertRaises(exception.VolumeBackendAPIException, self.nef.get,
                           rnd_url)
 
@@ -237,8 +246,6 @@ class TestNexentaJSONProxy(test.TestCase):
                 return r
 
         rnd_url = 'some/random/url'
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, rnd_url), RedirectTestAdapter())
-        self.nef.session.mount('{}://{}:{}/{}'.format(
-            'http', HOST, 8080, redirect_url), self.gen_adapter(201))
+        self._mount_adapter(rnd_url, RedirectTestAdapter())
+        self._mount_adapter(redirect_url, self.gen_adapter(201))
         self.assertIsNone(self.nef.get(rnd_url))

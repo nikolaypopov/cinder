@@ -312,7 +312,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         volume_path = self._get_volume_path(volume)
 
         # Find out whether the volume is exported
-        vol_map_url = 'san/lunMappings?volume={}&fields=lun'.format(
+        vol_map_url = 'san/lunMappings?volume=%s&fields=lun' % (
             volume_path.replace('/', '%2F'))
         data = self.nef.get(vol_map_url).get('data')
         if data:
@@ -340,8 +340,11 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 self.nef.post(url, data)
 
                 # Get the name of just created target
-                data = self.nef.get(url + '?fields=name&alias={}'.format(
-                    tg_name))['data']
+                data = self.nef.get(
+                    '%(url)s?fields=name&alias=%(tg_name)s' % {
+                        'url': url,
+                        'tg_name': tg_name
+                    })['data']
                 target_name = data[0]['name']
 
                 self._create_target_group(tg_name, target_name)
@@ -404,9 +407,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         volume_path = self._get_volume_path(volume)
 
         # Get ID of a LUN mapping if the volume is exported
-        url = 'san/lunMappings?volume={}&fields=id'.format(
-            volume_path.replace('/', '%2F')
-        )
+        url = 'san/lunMappings?volume=%s&fields=id' % (
+            volume_path.replace('/', '%2F'))
         data = self.nef.get(url)['data']
         if data:
             url = 'san/lunMappings/%s' % data[0]['id']
@@ -467,8 +469,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         }
 
     def _fill_volumes(self, tg_name):
-        url = ('san/lunMappings?targetGroup={}&fields=volume'
-               '&limit=50000').format(tg_name)
+        url = ('san/lunMappings?targetGroup=%s&fields=volume'
+               '&limit=50000' % tg_name)
         self.volumes[tg_name] = {
             mapping['volume'] for mapping in self.nef.get(url)['data']}
 

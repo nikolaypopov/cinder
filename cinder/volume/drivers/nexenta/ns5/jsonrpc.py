@@ -186,7 +186,10 @@ class NexentaJSONProxy(object):
 
     @property
     def url(self):
-        return '{}://{}:{}'.format(self.scheme, self.host, self.port)
+        return '%(scheme)s://%(host)s:%(port)s' % {
+            'scheme': self.scheme,
+            'host': self.host,
+            'port': self.port}
 
     def __getattr__(self, name):
         if name in ('get', 'post', 'put', 'delete'):
