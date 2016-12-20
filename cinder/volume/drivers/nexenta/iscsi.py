@@ -13,10 +13,12 @@
 #    under the License.
 
 import six
+import time
 
 from oslo_log import log as logging
 from oslo_utils import excutils
 
+from cinder import context
 from cinder import exception
 from cinder.i18n import _, _LE, _LI, _LW
 from cinder.volume import driver
@@ -49,7 +51,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 destroy snapshot on migration destination.
         1.3.0 - Added retype method.
         1.3.0.1 - Target creation refactor.
-        1.3.1 - Added abandoned volumes and snapshots cleanup.
+        1.3.1 - Added cleanup for abandoned snapshots and volumes
     """
 
     VERSION = VERSION
@@ -215,11 +217,16 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         :param volume: volume reference
         :return: model update dict for volume reference
         """
-        self.nms.zvol.create(
-            self._get_zvol_name(volume['name']),
-            '%sG' % (volume['size'],),
-            six.text_type(self.configuration.nexenta_blocksize),
-            self.configuration.nexenta_sparse)
+        try:
+            self.nms.zvol.create(
+                self._get_zvol_name(volume['name']),
+                '%sG' % (volume['size'],),
+                six.text_type(self.configuration.nexenta_blocksize),
+                self.configuration.nexenta_sparse)
+        except exception.NexentaException as exc:
+            if 'dataset already exists' not in exc.args[0]:
+                raise
+        self._do_export(context.get_admin_context(), volume)
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
@@ -599,6 +606,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         :param volume: reference of volume to be exported
         """
         zvol_name = self._get_zvol_name(volume['name'])
+        if volume['provider_location'] and self._is_lu_shared(zvol_name):
+            return {'provider_location': volume['provider_location']}
         target_name = self._get_target_name(volume)
         target_group_name = self._get_target_group_name(target_name)
 
@@ -620,6 +629,12 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                     raise
                 LOG.info(_LI('Ignored LUN mapping entry addition error "%s" '
                              'while ensuring export.'), exc)
+            count = 0
+            while not self._is_lu_shared(zvol_name) and count < 10:
+                LOG.info('re-ensuring export for %s, try %d',
+                         volume['id'], count + 1)
+                time.sleep(1)
+                count += 1
         model_update = {}
         if entry:
             provider_location = '%(host)s:%(port)s,1 %(name)s %(lun)s' % {
@@ -629,6 +644,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 'lun': entry['lun'],
             }
             model_update = {'provider_location': provider_location}
+            self.db.volume_update(_ctx, volume['id'], model_update)
         return model_update
 
     def remove_export(self, _ctx, volume):
@@ -695,8 +711,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                     try:
                         self.nms.snapshot.destroy(object_to_destroy, '')
                     except exception.NexentaException as exc:
-                        LOG.debug('Error occurred while trying to delete a '
-                                  'snapshot: {}'.format(exc))
+                        LOG.debug(_('Error occured while trying to delete a '
+                                  'snapshot: {}').format(exc))
                         return
                 else:
 
@@ -710,8 +726,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                     try:
                         self.nms.zvol.destroy(object_to_destroy, '')
                     except exception.NexentaException as exc:
-                        LOG.debug('Error occurred while trying to delete a '
-                                  'volume: {}'.format(exc))
+                        LOG.debug(_('Error occured while trying to delete a '
+                                  'volume: {}').format(exc))
                         return
                 self.deleted_volumes.remove(name)
                 self._collect_garbage(parent)
