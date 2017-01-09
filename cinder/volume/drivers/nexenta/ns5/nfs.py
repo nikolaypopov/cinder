@@ -321,8 +321,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
                             {'vol': dataset_path,
                             'filesystem': volume['name']})
             raise
-        if ('volume_size' in snapshot and
-                volume['size'] > snapshot['volume_size']):
+        if volume['size'] > snapshot['volume_size']:
             new_size = volume['size']
             volume['size'] = snapshot['volume_size']
             self.extend_volume(volume, new_size)
@@ -338,6 +337,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
         LOG.info(_LI('Creating clone of volume: %s'), src_vref['id'])
         snapshot = {'volume_name': src_vref['name'],
                     'volume_id': src_vref['id'],
+                    'volume_size': src_vref['size'],
                     'name': self._get_clone_snapshot_name(volume)}
         self.create_snapshot(snapshot)
         try:
@@ -351,7 +351,6 @@ class NexentaNfsDriver(nfs.NfsDriver):
                 LOG.warning(_LW('Failed to delete zfs snapshot '
                                 '%(volume_name)s@%(name)s'), snapshot)
             raise
-        self.delete_snapshot(snapshot)
 
     def local_path(self, volume):
         """Get volume path (mounted locally fs path) for given volume.
