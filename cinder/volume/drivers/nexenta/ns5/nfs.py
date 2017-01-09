@@ -227,6 +227,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
+
         :param volume: volume reference
         :param new_size: volume new size in GB
         """
@@ -285,6 +286,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create new volume from other's snapshot on appliance.
+
         :param volume: reference of volume to be created
         :param snapshot: reference of source snapshot
         """
