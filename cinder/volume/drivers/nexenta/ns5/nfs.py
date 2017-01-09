@@ -321,7 +321,8 @@ class NexentaNfsDriver(nfs.NfsDriver):
                             {'vol': dataset_path,
                             'filesystem': volume['name']})
             raise
-        if volume['size'] > snapshot['volume_size']:
+        if ('volume_size' in snapshot and
+                volume['size'] > snapshot['volume_size']):
             new_size = volume['size']
             volume['size'] = snapshot['volume_size']
             self.extend_volume(volume, new_size)
