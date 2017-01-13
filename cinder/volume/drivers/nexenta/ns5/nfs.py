@@ -42,6 +42,9 @@ class NexentaNfsDriver(nfs.NfsDriver):
         1.1.0 - Added HTTPS support.
                 Added use of sessions for REST calls.
         1.2.0 - Support for extend volume.
+                Support for extending the volume in
+                create_volume_from_snapshot if the size of new volume is larger
+                than original volume size.
     """
 
     driver_prefix = 'nexenta'
@@ -233,7 +236,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
         :param new_size: volume new size in GB
         """
         LOG.info(_LI('Extending volume: %(id)s New size: %(size)s GB'),
-                 {'id': volume.id, 'size': new_size})
+                 {'id': volume['id'], 'size': new_size})
         if self.sparsed_volumes:
             self._execute('truncate', '-s', '%sG' % new_size,
                           self.local_path(volume),
