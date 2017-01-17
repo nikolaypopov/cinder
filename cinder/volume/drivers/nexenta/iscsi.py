@@ -606,8 +606,9 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         :param volume: reference of volume to be exported
         """
         zvol_name = self._get_zvol_name(volume['name'])
-        if volume['provider_location'] and self._is_lu_shared(zvol_name):
-            return {'provider_location': volume['provider_location']}
+        location = self.db.volume_get(_ctx, volume['id'])['provider_location']
+        if location and self._is_lu_shared(zvol_name):
+            return {'provider_location': location}
         target_name = self._get_target_name(volume)
         target_group_name = self._get_target_group_name(target_name)
 
