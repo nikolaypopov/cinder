@@ -134,12 +134,14 @@ class TestNexentaNfsDriver(test.TestCase):
 
     @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
            'NexentaNfsDriver._ensure_share_mounted')
-    def test_delete_volume(self, ensure):
+    @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
+           'NexentaNfsDriver.collect_zfs_garbage')
+    def test_delete_volume(self, ensure, collect):
         self._create_volume_db_entry()
         self.nef_mock.get.return_value = {}
         self.drv.delete_volume(self.TEST_VOLUME)
         self.nef_mock.delete.assert_called_with(
-            'storage/pools/pool/filesystems/share%2Fvolume-1?snapshots=true')
+            'storage/pools/pool/filesystems/share%2Fvolume-1')
 
     def test_create_snapshot(self):
         self._create_volume_db_entry()
@@ -148,7 +150,9 @@ class TestNexentaNfsDriver(test.TestCase):
         data = {'name': self.TEST_SNAPSHOT['name']}
         self.nef_mock.post.assert_called_with(url, data)
 
-    def test_delete_snapshot(self):
+    @patch('cinder.volume.drivers.nexenta.ns5.nfs.'
+           'NexentaNfsDriver.collect_zfs_garbage')
+    def test_delete_snapshot(self, collect):
         self._create_volume_db_entry()
         self.drv.delete_snapshot(self.TEST_SNAPSHOT)
         url = ('storage/pools/pool/filesystems/share%2Fvolume-1/'
