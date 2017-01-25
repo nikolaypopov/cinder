@@ -33,6 +33,9 @@ VERSION = '1.2.0'
 LOG = logging.getLogger(__name__)
 TARGET_GROUP_PREFIX = 'cinder-tg-'
 
+from cinder.volume import volume_types
+EXTRA_SPECS_REPL_ENABLED = "replication_enabled"
+
 
 @interface.volumedriver
 class NexentaISCSIDriver(driver.ISCSIDriver,
@@ -83,6 +86,10 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         self.iscsi_target_portal_port = (
             self.configuration.nexenta_iscsi_target_portal_port)
 
+        self._is_replication_enabled = False
+        self._active_backend_id = kwargs.get('active_backend_id', None)
+        LOG.debug('KWARGS: %s', kwargs)
+
     @property
     def backend_name(self):
         backend_name = None
@@ -93,6 +100,13 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         return backend_name
 
     def do_setup(self, context):
+        replication_devices = self.configuration.safe_get(
+            'replication_device')
+        LOG.debug('REPLICATION DEVICES: %s', replication_devices)
+        if replication_devices:
+            # self.parse_replication_configs()
+            self._is_replication_enabled = True
+
         self.nef = jsonrpc.NexentaJSONProxy(
             self.nef_host, self.nef_port, self.nef_user,
             self.nef_password, self.use_https)
@@ -469,7 +483,13 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
             'volume_backend_name': self.backend_name,
             'location_info': location_info,
             'iscsi_target_portal_port': self.iscsi_target_portal_port,
-            'nef_url': self.nef.url
+            'nef_url': self.nef.url,
+
+            'replication_enabled': self._is_replication_enabled
+            #data["replication_type"] = ["async"]
+            #data["replication_count"] = len(self._replication_target_arrays)
+            #data["replication_targets"] = [array._backend_id for array
+            #                           in self._replication_target_arrays]
         }
 
     def _fill_volumes(self, tg_name):
@@ -511,3 +531,112 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
 
     def get_delete_volume_url(self, zfs_object):
         return self.get_original_snapshot_url(zfs_object)
+
+
+    def _is_volume_replicated_type(self, volume):
+        ctxt = context.get_admin_context()
+        replication_flag = False
+        if volume["volume_type_id"]:
+            volume_type = volume_types.get_volume_type(
+                ctxt, volume["volume_type_id"])
+
+            specs = volume_type.get("extra_specs")
+            if specs and EXTRA_SPECS_REPL_ENABLED in specs:
+                replication_capability = specs[EXTRA_SPECS_REPL_ENABLED]
+                # Do not validate settings, ignore invalid.
+                replication_flag = (replication_capability == "<is> True")
+        return replication_flag
+
+    def failover_host(self, context, volumes, secondary_id=None):
+        """Failover backend to a secondary array
+
+        This action will not affect the original volumes in any
+        way and it will stay as is. If a subsequent failover is performed we
+        will simply overwrite the original (now unmanaged) volumes.
+        """
+
+        if secondary_id == 'default':
+            # We are going back to the 'original' driver config, just put
+            # our current array back to the primary.
+            if self._failed_over_primary_array:
+                self._set_current_array(self._failed_over_primary_array)
+                return secondary_id, []
+            else:
+                msg = _('Unable to failback to "default", this can only be '
+                        'done after a failover has completed.')
+                raise exception.InvalidReplicationTarget(message=msg)
+
+        current_array = self._get_current_array()
+        LOG.debug("Failover replication for array %(primary)s to "
+                  "%(secondary)s." % {
+                      "primary": current_array._backend_id,
+                      "secondary": secondary_id
+                  })
+
+        if secondary_id == current_array._backend_id:
+            raise exception.InvalidReplicationTarget(
+                reason=_("Secondary id can not be the same as primary array, "
+                         "backend_id = %(secondary)s.") %
+                {"secondary": secondary_id}
+            )
+
+        secondary_array, pg_snap = self._find_failover_target(secondary_id)
+        LOG.debug("Starting failover from %(primary)s to %(secondary)s",
+                  {"primary": current_array.array_name,
+                   "secondary": secondary_array.array_name})
+
+        # NOTE(patrickeast): This currently requires a call with REST API 1.3.
+        # If we need to, create a temporary FlashArray for this operation.
+        api_version = secondary_array.get_rest_version()
+        LOG.debug("Current REST API for array id %(id)s is %(api_version)s",
+                  {"id": secondary_array.array_id, "api_version": api_version})
+        if api_version != '1.3':
+            target_array = self._get_flasharray(
+                secondary_array._target,
+                api_token=secondary_array._api_token,
+                rest_version='1.3',
+                verify_https=secondary_array._verify_https,
+                ssl_cert_path=secondary_array._ssl_cert
+            )
+        else:
+            target_array = secondary_array
+
+        volume_snaps = target_array.get_volume(pg_snap['name'],
+                                               snap=True,
+                                               pgroup=True)
+
+        # We only care about volumes that are in the list we are given.
+        vol_names = set()
+        for vol in volumes:
+            vol_names.add(self._get_vol_name(vol))
+
+        for snap in volume_snaps:
+            vol_name = snap['name'].split('.')[-1]
+            if vol_name in vol_names:
+                vol_names.remove(vol_name)
+                LOG.debug('Creating volume %(vol)s from replicated snapshot '
+                          '%(snap)s', {'vol': vol_name, 'snap': snap['name']})
+                secondary_array.copy_volume(snap['name'],
+                                            vol_name,
+                                            overwrite=True)
+            else:
+                LOG.debug('Ignoring unmanaged volume %(vol)s from replicated '
+                          'snapshot %(snap)s.', {'vol': vol_name,
+                                                 'snap': snap['name']})
+        # The only volumes remaining in the vol_names set have been left behind
+        # on the array and should be considered as being in an error state.
+        model_updates = []
+        for vol in volumes:
+            if self._get_vol_name(vol) in vol_names:
+                model_updates.append({
+                    'volume_id': vol['id'],
+                    'updates': {
+                        'status': 'error',
+                    }
+                })
+
+        # After failover we want our current array to be swapped for the
+        # secondary array we just failed over to.
+        self._failed_over_primary_array = self._get_current_array()
+        self._set_current_array(secondary_array)
+        return secondary_array._backend_id, model_updates
