@@ -16,13 +16,14 @@
 # howard lee <howard@mail.ustc.edu.cn>, 2016. #zanata
 msgid ""
 msgstr ""
-"Project-Id-Version: cinder 9.0.0.0rc2.dev3\n"
+
+"Project-Id-Version: cinder 9.0.0.0b4.dev169\n"
 "Report-Msgid-Bugs-To: https://bugs.launchpad.net/openstack-i18n/\n"
-"POT-Creation-Date: 2016-09-16 13:54+0000\n"
+"POT-Creation-Date: 2016-09-15 21:14+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"PO-Revision-Date: 2016-09-18 08:40+0000\n"
+"PO-Revision-Date: 2016-09-18 05:48+0000\n"
 "Last-Translator: howard lee <howard@mail.ustc.edu.cn>\n"
 "Language: zh-CN\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
@@ -1431,7 +1432,7 @@ msgstr "Cisco 光纤通道分区 CLI 错误：%(reason)s"
 
 #, python-format
 msgid "Client with ip %s wasn't found "
-msgstr "未找到ip为 %s 的客户端"
+msgstr "为找到ip为 %s 的客户端"
 
 msgid ""
 "Clone can't be taken individually on a volume that is part of a Consistency "
@@ -1570,7 +1571,8 @@ msgstr "找不到一致性组 %s"
 
 #, python-format
 msgid "Consistency Group %s: not found"
-msgstr "找不到一致性组： %s"
+
+msgstr "找不到一致性组 %s"
 
 msgid "Consistency group is empty. No cgsnapshot will be created."
 msgstr "一致性组为空组。将不创建任何 cg 快照。"
@@ -4491,6 +4493,10 @@ msgid "Host type %s not supported."
 msgstr "不支持主机类型 %s。"
 
 #, python-format
+msgid "Host with name: %s not found"
+msgstr "找不到名为 %s 的主机"
+
+#, python-format
 msgid "Host with ports %(ports)s not found."
 msgstr "找不到具有端口 %(ports)s 的主机。"
 
@@ -5956,6 +5962,10 @@ msgstr "请提前创建 %(pool_list)s 池！"
 msgid "Please create %(tier_levels)s tier in pool %(pool)s in advance!"
 msgstr "请提前在池 %(pool)s 中创建 %(tier_levels)s 层！"
 
+#, python-format
+msgid "Please provide at least one volume for parameter %s"
+msgstr "请为参数 %s 提供至少一个卷"
+
 msgid "Please re-run cinder-manage as root."
 msgstr "请以 root 用户身份重新运行 cinder-manage。"
 
@@ -6024,9 +6034,16 @@ msgstr "Cinder程序错误:%(reason)s"
 msgid "Project ID"
 msgstr "项目ID"
 
+msgid "Project name not specified"
+msgstr "未指定项目名称"
+
 #, python-format
 msgid "Project quotas are not properly setup for nested quotas: %(reason)s."
 msgstr "未正确设置要用作嵌套配额的项目配额：%(reason)s。"
+
+#, python-format
+msgid "Project: %s not found"
+msgstr "找不到项目：%s"
 
 msgid "Protection Group not ready."
 msgstr "保护组未就绪。"
@@ -6929,6 +6946,10 @@ msgstr "任务在 %d 秒内没有完成，操作超时，CoprHD 中的任务将�
 msgid "Task: %(task_id)s is failed with error: %(error_message)s"
 msgstr "任务 %(task_id)s 失败，错误信息为: %(error_message)s"
 
+#, python-format
+msgid "Tenant %s: not found"
+msgstr "找不到租户：%s"
+
 msgid "Terminate connection failed"
 msgstr "终止连接发生故障"
 
@@ -7471,6 +7492,9 @@ msgstr "此类型不能转换为 NaElement。"
 #, python-format
 msgid "TypeError: %s"
 msgstr "TypeError：%s"
+
+msgid "URI should end with /tag"
+msgstr "URI 应该以 /tag 结尾"
 
 #, python-format
 msgid "UUIDs %s are in both add and remove volume list."
@@ -8093,6 +8117,10 @@ msgid "VF is not enabled."
 msgstr "未启用 VF。"
 
 #, python-format
+msgid "VPool %(name)s ( %(vpooltype)s ) : not found"
+msgstr "找不到VPool：%(name)s ( %(vpooltype)s )  "
+
+#, python-format
 msgid "VV Set %s does not exist."
 msgstr "VV 集 %s 不存在。"
 
@@ -8286,6 +8314,10 @@ msgid ""
 msgstr ""
 "卷 %(volume_name)s: 更新失败\n"
 "%(err)s"
+
+#, python-format
+msgid "Volume %s : not found"
+msgstr "找不到卷：%s"
 
 #, python-format
 msgid "Volume %s could not be created from source volume."
@@ -8669,6 +8701,10 @@ msgid "Volume type with name %(volume_type_name)s could not be found."
 msgstr "名为 %(volume_type_name)s 的卷类型没有找到。"
 
 #, python-format
+msgid "Volume%s: not found"
+msgstr "找不到卷%s"
+
+#, python-format
 msgid ""
 "Volume: %(volumeName)s is not a concatenated volume. You can only perform "
 "extend on concatenated volume. Exiting..."
@@ -8910,6 +8946,9 @@ msgid ""
 msgstr ""
 "_find_pool，eternus_pool：%(eternus_pool)s，EnumerateInstances，无法连接至 "
 "ETERNUS。"
+
+msgid "_get_async_url: Invalid URL."
+msgstr "_get_async_url: 无效的 URL."
 
 #, python-format
 msgid ""
@@ -9339,14 +9378,6 @@ msgstr "在cinder配置中coprhd_username未被设置"
 msgid "coprhd_varray is not set in cinder configuration"
 msgstr "在cinder配置中coprhd_varray未被设置"
 
-#, python-format
-msgid "create group failed. Group name:%(name)s with Return code: %(ret)s."
-msgstr "创建名为 %(name)s 的组失败，返回的状态码为：%(ret)s。"
-
-#, python-format
-msgid "create host failed. Host name:%(name)s with Return code: %(ret)s."
-msgstr "创建名为 %(name)s 的主机失败，返回的状态码为：%(ret)s。"
-
 msgid "create_cloned_volume, Source Volume does not exist in ETERNUS."
 msgstr "create_cloned_volume，源卷在 ETERNUS 中不存在。"
 
@@ -9541,6 +9572,14 @@ msgid ""
 msgstr ""
 "将对象写入 swift 时出错，swift %(etag)s 中对象的 MD5 与发送至 swift %(md5)s "
 "的对象的 MD5 不同"
+
+#, python-format
+msgid ""
+"error: Incorrect value of new size: %(new_size_in_gb)s GB\n"
+"New size must be greater than current size: %(current_size)s GB"
+msgstr ""
+"错误: 新大小的值不正确: %(new_size_in_gb)s GB\n"
+"新大小必须大于当前大小: %(current_size)s GB"
 
 msgid "error: task list is empty, no task response found"
 msgstr "错误：任务列表为空，找不到任何任务响应"
@@ -9815,10 +9854,8 @@ msgid "name cannot be None"
 msgstr "name不能是None"
 
 msgid "no \"access-key\" field"
-msgstr "不存在\"access-key\"域"
 
-msgid "no \"user\" field"
-msgstr "不存在“user”域"
+msgstr "没有“access-key”域"
 
 #, python-format
 msgid "no REPLY but %r"
@@ -9954,6 +9991,10 @@ msgid "serve() can only be called once"
 msgstr "serve() 只能调用一次"
 
 #, python-format
+msgid "snapshot with the name: %s Not Found"
+msgstr "找不到名称为 %s 的快照"
+
+#, python-format
 msgid "snapshot-%s"
 msgstr "快照 - %s"
 
@@ -10046,6 +10087,10 @@ msgstr "以下压缩算法不受支持：%s"
 
 msgid "valid iqn needed for show_target"
 msgstr "show_target 需要有效 iqn"
+
+#, python-format
+msgid "varray %s: not found"
+msgstr "找不到varray：%s"
 
 #, python-format
 msgid "vdisk %s is not defined."
