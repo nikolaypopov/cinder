@@ -23,13 +23,9 @@ number and the weighing has the opposite effect of the default.
 
 
 from oslo_config import cfg
-from oslo_log import log as logging
 
 from cinder import db
 from cinder.scheduler import weights
-
-
-LOG = logging.getLogger(__name__)
 
 
 volume_number_weight_opts = [
@@ -54,6 +50,7 @@ class VolumeNumberWeigher(weights.BaseHostWeigher):
         We want spreading to be the default.
         """
         context = weight_properties['context']
+        context = context.elevated()
         volume_number = db.volume_data_get_for_host(context=context,
                                                     host=host_state.host,
                                                     count_only=True)

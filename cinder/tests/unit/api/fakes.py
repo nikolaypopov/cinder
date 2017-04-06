@@ -29,8 +29,10 @@ from cinder.api.openstack import wsgi as os_wsgi
 from cinder.api import urlmap
 from cinder.api.v2 import limits
 from cinder.api.v2 import router
+from cinder.api.v3 import router as router_v3
 from cinder.api import versions
 from cinder import context
+from cinder.tests.unit import fake_constants as fake
 
 
 FAKE_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -59,26 +61,38 @@ def fake_wsgi(self, req):
 
 
 def wsgi_app(inner_app_v2=None, fake_auth=True, fake_auth_context=None,
-             use_no_auth=False, ext_mgr=None):
+             use_no_auth=False, ext_mgr=None,
+             inner_app_v3=None):
     if not inner_app_v2:
         inner_app_v2 = router.APIRouter(ext_mgr)
+
+    if not inner_app_v3:
+        inner_app_v3 = router_v3.APIRouter(ext_mgr)
 
     if fake_auth:
         if fake_auth_context is not None:
             ctxt = fake_auth_context
         else:
-            ctxt = context.RequestContext('fake', 'fake', auth_token=True)
+            ctxt = context.RequestContext(fake.USER_ID, fake.PROJECT_ID,
+                                          auth_token=True)
         api_v2 = fault.FaultWrapper(auth.InjectContext(ctxt,
                                                        inner_app_v2))
+        api_v3 = fault.FaultWrapper(auth.InjectContext(ctxt,
+                                                       inner_app_v3))
     elif use_no_auth:
         api_v2 = fault.FaultWrapper(auth.NoAuthMiddleware(
             limits.RateLimitingMiddleware(inner_app_v2)))
+        api_v3 = fault.FaultWrapper(auth.NoAuthMiddleware(
+            limits.RateLimitingMiddleware(inner_app_v3)))
     else:
         api_v2 = fault.FaultWrapper(auth.AuthMiddleware(
             limits.RateLimitingMiddleware(inner_app_v2)))
+        api_v3 = fault.FaultWrapper(auth.AuthMiddleware(
+            limits.RateLimitingMiddleware(inner_app_v3)))
 
     mapper = urlmap.URLMap()
     mapper['/v2'] = api_v2
+    mapper['/v3'] = api_v3
     mapper['/'] = fault.FaultWrapper(versions.VersionsController())
     return mapper
 
@@ -98,7 +112,7 @@ class FakeToken(object):
 
 class FakeRequestContext(context.RequestContext):
     def __init__(self, *args, **kwargs):
-        kwargs['auth_token'] = kwargs.get('auth_token', 'fake_auth_token')
+        kwargs['auth_token'] = kwargs.get(fake.USER_ID, fake.PROJECT_ID)
         super(FakeRequestContext, self).__init__(*args, **kwargs)
 
 
@@ -113,13 +127,12 @@ class HTTPRequest(webob.Request):
                 kwargs['base_url'] = 'http://localhost/v2'
             if 'v3' in args[0]:
                 kwargs['base_url'] = 'http://localhost/v3'
-
         use_admin_context = kwargs.pop('use_admin_context', False)
         version = kwargs.pop('version', api_version._MIN_API_VERSION)
         out = os_wsgi.Request.blank(*args, **kwargs)
         out.environ['cinder.context'] = FakeRequestContext(
-            'fake_user',
-            'fakeproject',
+            fake.USER_ID,
+            fake.PROJECT_ID,
             is_admin=use_admin_context)
         out.api_version_request = api_version.APIVersionRequest(version)
         return out

@@ -41,7 +41,8 @@ class _FakeImageService(object):
                   'deleted_at': None,
                   'deleted': False,
                   'status': 'active',
-                  'is_public': False,
+                  'visibility': 'private',
+                  'protected': False,
                   'container_format': 'raw',
                   'disk_format': 'raw',
                   'properties': {'kernel_id': 'nokernel',
@@ -55,7 +56,8 @@ class _FakeImageService(object):
                   'deleted_at': None,
                   'deleted': False,
                   'status': 'active',
-                  'is_public': True,
+                  'visibility': 'public',
+                  'protected': True,
                   'container_format': 'ami',
                   'disk_format': 'ami',
                   'properties': {'kernel_id': 'nokernel',
@@ -68,7 +70,8 @@ class _FakeImageService(object):
                   'deleted_at': None,
                   'deleted': False,
                   'status': 'active',
-                  'is_public': True,
+                  'visibility': 'public',
+                  'protected': True,
                   'container_format': None,
                   'disk_format': None,
                   'properties': {'kernel_id': 'nokernel',
@@ -81,7 +84,8 @@ class _FakeImageService(object):
                   'deleted_at': None,
                   'deleted': False,
                   'status': 'active',
-                  'is_public': True,
+                  'visibility': 'public',
+                  'protected': True,
                   'container_format': 'ami',
                   'disk_format': 'ami',
                   'properties': {'kernel_id': 'nokernel',
@@ -93,8 +97,10 @@ class _FakeImageService(object):
                   'updated_at': timestamp,
                   'deleted_at': None,
                   'deleted': False,
+                  'size': 1024,
                   'status': 'active',
-                  'is_public': True,
+                  'visibility': 'public',
+                  'protected': True,
                   'container_format': 'ami',
                   'disk_format': 'ami',
                   'properties': {
@@ -108,7 +114,8 @@ class _FakeImageService(object):
                   'deleted_at': None,
                   'deleted': False,
                   'status': 'active',
-                  'is_public': False,
+                  'visibility': 'public',
+                  'protected': False,
                   'container_format': 'ova',
                   'disk_format': 'vhd',
                   'properties': {'kernel_id': 'nokernel',
@@ -123,7 +130,8 @@ class _FakeImageService(object):
                   'deleted_at': None,
                   'deleted': False,
                   'status': 'active',
-                  'is_public': False,
+                  'visibility': 'public',
+                  'protected': False,
                   'container_format': 'ova',
                   'disk_format': 'vhd',
                   'properties': {'kernel_id': 'nokernel',
@@ -230,8 +238,8 @@ def FakeImageService_reset():
     _fakeImageService = _FakeImageService()
 
 
-def stub_out_image_service(stubs):
-    stubs.Set(cinder.image.glance, 'get_remote_image_service',
-              lambda x, y: (FakeImageService(), y))
-    stubs.Set(cinder.image.glance, 'get_default_image_service',
-              lambda: FakeImageService())
+def mock_image_service(testcase):
+    testcase.mock_object(cinder.image.glance, 'get_remote_image_service',
+                         lambda x, y: (FakeImageService(), y))
+    testcase.mock_object(cinder.image.glance, 'get_default_image_service',
+                         mock.Mock(side_effect=FakeImageService))

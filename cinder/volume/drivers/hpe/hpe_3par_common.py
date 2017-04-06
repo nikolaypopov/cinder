@@ -147,6 +147,9 @@ class HPE3PARCommon(object):
     """Class that contains common code for the 3PAR drivers.
 
     Version history:
+
+    .. code-block:: none
+
         1.2.0 - Updated hp3parclient API use to 2.0.x
         1.2.1 - Check that the VVS exists
         1.2.2 - log prior to raising exceptions
@@ -231,16 +234,27 @@ class HPE3PARCommon(object):
         3.0.16 - Use same LUN ID for each VLUN path #1551994
         3.0.17 - Don't fail on clearing 3PAR object volume key. bug #1546392
         3.0.18 - create_cloned_volume account for larger size.  bug #1554740
-        3.0.18.1 - Rework delete_vlun. Bug #1582922 (backported from Newton)
-        3.0.18.2 - Driver no longer fails to initialize if System Reporter
-                   license is missing. bug #1568078 (backported from Newton)
-        3.0.18.3 - Fix delete volume when online clone is active. bug #1349639.
-                   (backported from Newton)
-        3.0.18.4 - Fix concurrent snapshot delete conflict. bug #1600104
+        3.0.19 - Remove metadata that tracks the instance ID. bug #1572665
+        3.0.20 - Fix lun_id of 0 issue. bug #1573298
+        3.0.21 - Driver no longer fails to initialize if
+                 System Reporter license is missing. bug #1568078
+        3.0.22 - Rework delete_vlun. Bug #1582922
+        3.0.23 - Fix CG create failures with long display name or special
+                 characters. bug #1573647
+        3.0.24 - Fix terminate connection on failover
+        3.0.25 - Fix delete volume when online clone is active. bug #1349639
+        3.0.26 - Fix concurrent snapshot delete conflict. bug #1600104
+        3.0.27 - Fix snapCPG error during backup of attached volume.
+                 Bug #1646396 and also ,Fix backup of attached ISCSI
+                 and CHAP enabled volume.bug #1644238.
+        3.0.28 - Remove un-necessary snapshot creation of source volume
+                 while doing online copy in create_cloned_volume call.
+                 Bug #1661541
+        3.0.29 - Fix convert snapshot volume to base volume type. bug #1656186
 
     """
 
-    VERSION = "3.0.18.4"
+    VERSION = "3.0.29"
 
     stats = {}
 
@@ -516,8 +530,6 @@ class HPE3PARCommon(object):
         cg_name = self._get_3par_vvs_name(group.id)
 
         extra = {'consistency_group_id': group.id}
-        extra['description'] = group.description
-        extra['display_name'] = group.name
         if group.cgsnapshot_id:
             extra['cgsnapshot_id'] = group.cgsnapshot_id
 
@@ -557,7 +569,10 @@ class HPE3PARCommon(object):
             volume_name = self._get_3par_vol_name(volume['id'])
             type_info = self.get_volume_settings_from_type(volume)
             cpg = type_info['cpg']
-            optional = {'online': True, 'snapCPG': cpg}
+            tpvv = type_info.get('tpvv', False)
+            tdvv = type_info.get('tdvv', False)
+            optional = {'online': True, 'snapCPG': cpg,
+                        'tpvv': tpvv, 'tdvv': tdvv}
             self.client.copyVolume(snap_name, volume_name, cpg, optional)
             self.client.addVolumeToVolumeSet(vvs_name, volume_name)
 
@@ -588,7 +603,7 @@ class HPE3PARCommon(object):
                 volume_update['status'] = 'deleted'
             except Exception as ex:
                 LOG.error(_LE("There was an error deleting volume %(id)s: "
-                              "%(error)."),
+                              "%(error)s."),
                           {'id': volume.id,
                            'error': six.text_type(ex)})
                 volume_update['status'] = 'error'
@@ -660,7 +675,7 @@ class HPE3PARCommon(object):
         snapshot_model_updates = []
         for snapshot in snapshots:
             snapshot_update = {'id': snapshot['id'],
-                               'status': 'available'}
+                               'status': fields.SnapshotStatus.AVAILABLE}
             snapshot_model_updates.append(snapshot_update)
 
         model_update = {'status': 'available'}
@@ -678,20 +693,20 @@ class HPE3PARCommon(object):
             try:
                 snap_name = cgsnap_name + "-" + six.text_type(i)
                 self.client.deleteVolume(snap_name)
-                snapshot_update['status'] = 'deleted'
+                snapshot_update['status'] = fields.SnapshotStatus.DELETED
             except hpeexceptions.HTTPNotFound as ex:
                 # We'll let this act as if it worked
                 # it helps clean up the cinder entries.
                 LOG.warning(_LW("Delete Snapshot id not found. Removing from "
                                 "cinder: %(id)s Ex: %(msg)s"),
                             {'id': snapshot['id'], 'msg': ex})
-                snapshot_update['status'] = 'error'
+                snapshot_update['status'] = fields.SnapshotStatus.ERROR
             except Exception as ex:
                 LOG.error(_LE("There was an error deleting snapshot %(id)s: "
-                              "%(error)."),
+                              "%(error)s."),
                           {'id': snapshot['id'],
                            'error': six.text_type(ex)})
-                snapshot_update['status'] = 'error'
+                snapshot_update['status'] = fields.SnapshotStatus.ERROR
             snapshot_model_updates.append(snapshot_update)
 
         model_update = {'status': cgsnapshot.status}
@@ -1119,7 +1134,7 @@ class HPE3PARCommon(object):
             location = None
             auto = True
 
-            if lun_id:
+            if lun_id is not None:
                 auto = False
 
             if nsp is None:
@@ -1621,11 +1636,18 @@ class HPE3PARCommon(object):
     def get_cpg(self, volume, allowSnap=False):
         volume_name = self._get_3par_vol_name(volume['id'])
         vol = self.client.getVolume(volume_name)
+        # Search for 'userCPG' in the get volume REST API,
+        # if found return userCPG , else search for snapCPG attribute
+        # when allowSnap=True. For the cases where 3PAR REST call for
+        # get volume doesn't have either userCPG or snapCPG ,
+        # take the default value of cpg from 'host' attribute from volume param
+        LOG.debug("get volume response is: %s", vol)
         if 'userCPG' in vol:
             return vol['userCPG']
-        elif allowSnap:
+        elif allowSnap and 'snapCPG' in vol:
             return vol['snapCPG']
-        return None
+        else:
+            return volume_utils.extract_host(volume['host'], 'pool')
 
     def _get_3par_vol_comment(self, volume_name):
         vol = self.client.getVolume(volume_name)
@@ -1978,22 +2000,38 @@ class HPE3PARCommon(object):
         try:
             vol_name = self._get_3par_vol_name(volume['id'])
             src_vol_name = self._get_3par_vol_name(src_vref['id'])
+            back_up_process = False
+            vol_chap_enabled = False
 
-            # if the sizes of the 2 volumes are the same
+            # Check whether a volume is ISCSI and CHAP enabled on it.
+            if self._client_conf['hpe3par_iscsi_chap_enabled']:
+                try:
+                    vol_chap_enabled = self.client.getVolumeMetaData(
+                        src_vol_name, 'HPQ-cinder-CHAP-name')['value']
+                except hpeexceptions.HTTPNotFound:
+                    LOG.debug("CHAP is not enabled on volume %(vol)s ",
+                              {'vol': src_vref['id']})
+                    vol_chap_enabled = False
+
+            # Check whether a process is a backup
+            if str(src_vref['status']) == 'backing-up':
+                back_up_process = True
+
+            # if the sizes of the 2 volumes are the same and except backup
+            # process for ISCSI volume with chap enabled on it.
             # we can do an online copy, which is a background process
             # on the 3PAR that makes the volume instantly available.
             # We can't resize a volume, while it's being copied.
-            if volume['size'] == src_vref['size']:
-                LOG.debug("Creating a clone of same size, using online copy.")
-                # create a temporary snapshot
-                snapshot = self._create_temp_snapshot(src_vref)
+            if volume['size'] == src_vref['size'] and not (
+               back_up_process and vol_chap_enabled):
+                LOG.debug("Creating a clone of volume, using online copy.")
 
                 type_info = self.get_volume_settings_from_type(volume)
                 cpg = type_info['cpg']
 
                 # make the 3PAR copy the contents.
                 # can't delete the original until the copy is done.
-                self._copy_volume(snapshot['name'], vol_name, cpg=cpg,
+                self._copy_volume(src_vol_name, vol_name, cpg=cpg,
                                   snap_cpg=type_info['snap_cpg'],
                                   tpvv=type_info['tpvv'],
                                   tdvv=type_info['tdvv'])
@@ -2011,8 +2049,7 @@ class HPE3PARCommon(object):
                 # The size of the new volume is different, so we have to
                 # copy the volume and wait.  Do the resize after the copy
                 # is complete.
-                LOG.debug("Clone a volume with a different target size. "
-                          "Using non-online copy.")
+                LOG.debug("Creating a clone of volume, using non-online copy.")
 
                 # we first have to create the destination volume
                 model_update = self.create_volume(volume)
@@ -2201,13 +2238,15 @@ class HPE3PARCommon(object):
 
             self.client.createSnapshot(volume_name, snap_name, optional)
 
+            # Convert snapshot volume to base volume type
+            LOG.debug('Converting to base volume type: %s.',
+                      volume['id'])
+            model_update = self._convert_to_base_volume(volume)
+
             # Grow the snapshot if needed
             growth_size = volume['size'] - snapshot['volume_size']
             if growth_size > 0:
                 try:
-                    LOG.debug('Converting to base volume type: %s.',
-                              volume['id'])
-                    model_update = self._convert_to_base_volume(volume)
                     growth_size_mib = growth_size * units.Gi / units.Mi
                     LOG.debug('Growing volume: %(id)s by %(size)s GiB.',
                               {'id': volume['id'], 'size': growth_size})
@@ -2292,72 +2331,6 @@ class HPE3PARCommon(object):
         except hpeexceptions.HTTPNotFound as ex:
             LOG.error(_LE("Exception: %s"), ex)
             raise exception.NotFound()
-
-    def update_volume_key_value_pair(self, volume, key, value):
-        """Updates key,value pair as metadata onto virtual volume.
-
-        If key already exists, the value will be replaced.
-        """
-        LOG.debug("VOLUME (%(disp_name)s : %(vol_name)s %(id)s) "
-                  "Updating KEY-VALUE pair: (%(key)s : %(val)s)",
-                  {'disp_name': volume['display_name'],
-                   'vol_name': volume['name'],
-                   'id': self._get_3par_vol_name(volume['id']),
-                   'key': key,
-                   'val': value})
-        try:
-            volume_name = self._get_3par_vol_name(volume['id'])
-            if value is None:
-                value = ''
-            self.client.setVolumeMetaData(volume_name, key, value)
-        except Exception as ex:
-            msg = _('Failure in update_volume_key_value_pair:%s') % ex
-            LOG.error(msg)
-            raise exception.VolumeBackendAPIException(data=msg)
-
-    def clear_volume_key_value_pair(self, volume, key):
-        """Clears key,value pairs metadata from virtual volume."""
-
-        LOG.debug("VOLUME (%(disp_name)s : %(vol_name)s %(id)s) "
-                  "Clearing Key : %(key)s)",
-                  {'disp_name': volume['display_name'],
-                   'vol_name': volume['name'],
-                   'id': self._get_3par_vol_name(volume['id']),
-                   'key': key})
-        try:
-            volume_name = self._get_3par_vol_name(volume['id'])
-            self.client.removeVolumeMetaData(volume_name, key)
-        except Exception as ex:
-            LOG.warning(_LW('Issue occurred in clear_volume_key_value_pair: '
-                            '%s'), six.text_type(ex))
-
-    def attach_volume(self, volume, instance_uuid):
-        """Save the instance UUID in the volume.
-
-           TODO: add support for multi-attach
-
-        """
-        LOG.debug("Attach Volume\n%s", pprint.pformat(volume))
-        try:
-            self.update_volume_key_value_pair(volume,
-                                              'HPQ-CS-instance_uuid',
-                                              instance_uuid)
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.error(_LE("Error attaching volume %s"), volume)
-
-    def detach_volume(self, volume, attachment=None):
-        """Remove the instance uuid from the volume.
-
-           TODO: add support for multi-attach.
-
-        """
-        LOG.debug("Detach Volume\n%s", pprint.pformat(volume))
-        try:
-            self.clear_volume_key_value_pair(volume, 'HPQ-CS-instance_uuid')
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.error(_LE("Error detaching volume %s"), volume)
 
     def migrate_volume(self, volume, host):
         """Migrate directly if source and dest are managed by same storage.
@@ -2607,12 +2580,26 @@ class HPE3PARCommon(object):
             return
         except hpeexceptions.HTTPNotFound as e:
             if 'host does not exist' in e.get_description():
-                # use the wwn to see if we can find the hostname
-                hostname = self._get_3par_hostname_from_wwn_iqn(wwn, iqn)
-                # no 3par host, re-throw
-                if hostname is None:
-                    LOG.error(_LE("Exception: %s"), e)
-                    raise
+                # If a host is failed-over, we want to allow the detach to
+                # 'succeed' when it cannot find the host. We can simply
+                # return out of the terminate connection in order for things
+                # to be updated correctly.
+                if self._active_backend_id:
+                    LOG.warning(_LW("Because the host is currently in a "
+                                    "failed-over state, the volume will not "
+                                    "be properly detached from the primary "
+                                    "array. The detach will be considered a "
+                                    "success as far as Cinder is concerned. "
+                                    "The volume can now be attached to the "
+                                    "secondary target."))
+                    return
+                else:
+                    # use the wwn to see if we can find the hostname
+                    hostname = self._get_3par_hostname_from_wwn_iqn(wwn, iqn)
+                    # no 3par host, re-throw
+                    if hostname is None:
+                        LOG.error(_LE("Exception: %s"), e)
+                        raise
             else:
                 # not a 'host does not exist' HTTPNotFound exception, re-throw
                 LOG.error(_LE("Exception: %s"), e)
@@ -2959,7 +2946,8 @@ class HPE3PARCommon(object):
             raise exception.VolumeBackendAPIException(data=msg)
 
         # Check to see if the user requested to failback.
-        if secondary_backend_id == self.FAILBACK_VALUE:
+        if (secondary_backend_id and
+                secondary_backend_id == self.FAILBACK_VALUE):
             volume_update_list = self._replication_failback(volumes)
             target_id = None
         else:

@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import ddt
 import mock
 
 from cinder.objects import base
@@ -25,6 +26,7 @@ class FakeAPI(rpc.RPCAPI):
     BINARY = 'cinder-scheduler'
 
 
+@ddt.ddt
 class RPCAPITestCase(test.TestCase):
     """Tests RPCAPI mixin aggregating stuff related to RPC compatibility."""
 
@@ -37,30 +39,14 @@ class RPCAPITestCase(test.TestCase):
     @mock.patch('cinder.objects.Service.get_minimum_rpc_version',
                 return_value='1.2')
     @mock.patch('cinder.objects.Service.get_minimum_obj_version',
-                return_value='1.3')
+                return_value='1.4')
     @mock.patch('cinder.rpc.get_client')
     def test_init(self, get_client, get_min_obj, get_min_rpc):
         def fake_get_client(target, version_cap, serializer):
             self.assertEqual(FakeAPI.TOPIC, target.topic)
             self.assertEqual(FakeAPI.RPC_API_VERSION, target.version)
             self.assertEqual('1.2', version_cap)
-            self.assertEqual('1.3', serializer.version_cap)
-
-        get_client.side_effect = fake_get_client
-        FakeAPI()
-
-    @mock.patch('cinder.objects.Service.get_minimum_rpc_version',
-                return_value='liberty')
-    @mock.patch('cinder.objects.Service.get_minimum_obj_version',
-                return_value='liberty')
-    @mock.patch('cinder.rpc.get_client')
-    def test_init_liberty_caps(self, get_client, get_min_obj, get_min_rpc):
-        def fake_get_client(target, version_cap, serializer):
-            self.assertEqual(FakeAPI.TOPIC, target.topic)
-            self.assertEqual(FakeAPI.RPC_API_VERSION, target.version)
-            self.assertEqual(rpc.LIBERTY_RPC_VERSIONS[FakeAPI.BINARY],
-                             version_cap)
-            self.assertEqual('liberty', serializer.version_cap)
+            self.assertEqual('1.4', serializer.version_cap)
 
         get_client.side_effect = fake_get_client
         FakeAPI()
@@ -99,3 +85,20 @@ class RPCAPITestCase(test.TestCase):
 
         self.assertFalse(get_min_obj.called)
         self.assertFalse(get_min_rpc.called)
+
+    @ddt.data([], ['noop'], ['noop', 'noop'])
+    @mock.patch('oslo_messaging.JsonPayloadSerializer', wraps=True)
+    def test_init_no_notifications(self, driver, serializer_mock):
+        """Test short-circuiting notifications with default and noop driver."""
+        self.override_config('driver', driver,
+                             group='oslo_messaging_notifications')
+        rpc.init(test.CONF)
+        self.assertEqual(rpc.utils.DO_NOTHING, rpc.NOTIFIER)
+        serializer_mock.assert_not_called()
+
+    @mock.patch.object(rpc, 'messaging')
+    def test_init_notifications(self, messaging_mock):
+        rpc.init(test.CONF)
+        self.assertTrue(messaging_mock.JsonPayloadSerializer.called)
+        self.assertTrue(messaging_mock.Notifier.called)
+        self.assertEqual(rpc.NOTIFIER, messaging_mock.Notifier.return_value)

@@ -42,6 +42,7 @@ import six
 from cinder.backup import chunkeddriver
 from cinder import exception
 from cinder.i18n import _
+from cinder import interface
 
 
 LOG = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ gcsbackup_service_opts = [
                      'progress notifications to Ceilometer when backing '
                      'up the volume to the GCS backend storage. The '
                      'default value is True to enable the timer.'),
-    cfg.StrOpt('backup_gcs_proxy_url',
+    cfg.URIOpt('backup_gcs_proxy_url',
                help='URL for http proxy access.',
                secret=True),
 
@@ -114,6 +115,7 @@ def gcs_logger(func):
     return func_wrapper
 
 
+@interface.backupdriver
 class GoogleBackupDriver(chunkeddriver.ChunkedBackupDriver):
     """Provides backup, restore and delete of backup objects within GCS."""
 
