@@ -25,7 +25,7 @@ from cinder.volume.drivers.nexenta import jsonrpc
 from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
 
-VERSION = '1.3.1'
+VERSION = '1.3.2'
 LOG = logging.getLogger(__name__)
 
 
@@ -52,6 +52,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         1.3.0 - Added retype method.
         1.3.0.1 - Target creation refactor.
         1.3.1 - Added ZFS cleanup.
+        1.3.2 - Added support for target_portal_group and zvol folder.
     """
 
     VERSION = VERSION
@@ -79,6 +80,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         self.nms_user = self.configuration.nexenta_user
         self.nms_password = self.configuration.nexenta_password
         self.volume = self.configuration.nexenta_volume
+        self.folder = self.configuration.nexenta_folder
+        self.tpgs = self.configuration.nexenta_iscsi_target_portal_groups
         self.volume_compression = (
             self.configuration.nexenta_dataset_compression)
         self.volume_deduplication = self.configuration.nexenta_dataset_dedup
@@ -118,10 +121,19 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         if not self.nms.volume.object_exists(self.volume):
             raise LookupError(_("Volume %s does not exist in Nexenta SA") %
                               self.volume)
+        if self.folder:
+            folder = '%s/%s' % (self.volume, self.folder)
+            if not self.nms.folder.object_exists(folder):
+                raise LookupError(_("Folder %s does not exist in Nexenta "
+                                    "Store appliance"), folder)
 
     def _get_zvol_name(self, volume_name):
         """Return zvol name that corresponds given volume name."""
-        return '%s/%s' % (self.volume, volume_name)
+        if self.folder:
+            path = '%s/%s' % (self.volume, self.folder)
+        else:
+            path = self.volume
+        return '%s/%s' % (path, volume_name)
 
     def _create_target(self, target_idx):
         target_name = '%s-%s-%i' % (
@@ -134,7 +146,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         if not self._target_exists(target_name):
             try:
                 self.nms.iscsitarget.create_target({
-                    'target_name': target_name})
+                    'target_name': target_name,
+                    'tpgs': self.tpgs})
             except exception.NexentaException as exc:
                 if 'already' in exc.args[0]:
                     LOG.info('Ignored target creation error %s while '
