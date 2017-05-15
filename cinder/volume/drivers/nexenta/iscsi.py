@@ -277,8 +277,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 (self._get_zvol_name(src_vref['name']), snapshot['name'])))
         except exception.NexentaException:
             with excutils.save_and_reraise_exception():
-                LOG.exception('Volume creation failed, deleting created snapshot '
-                    '%(volume_name)s@%(name)s', snapshot)
+                LOG.exception('Volume creation failed, deleting created '
+                              'snapshot %(volume_name)s@%(name)s', snapshot)
             try:
                 self.delete_snapshot(snapshot)
             except (exception.NexentaException, exception.SnapshotIsBusy):
@@ -427,7 +427,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                         {
                             'src_backend': src_backend,
                             'dst_backend': dst_backend,
-            })
+                        })
             return False
 
         hosts = (volume['host'], host['host'])

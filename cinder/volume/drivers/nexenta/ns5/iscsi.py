@@ -288,13 +288,13 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         except exception.NexentaException:
             LOG.error('Volume creation failed, deleting created snapshot '
                       '%s', '@'.join(
-                [snapshot['volume_name'], snapshot['name']]))
+                          [snapshot['volume_name'], snapshot['name']]))
             try:
                 self.delete_snapshot(snapshot)
             except (exception.NexentaException, exception.SnapshotIsBusy):
                 LOG.warning('Failed to delete zfs snapshot '
                             '%s', '@'.join(
-                    [snapshot['volume_name'], snapshot['name']]))
+                                [snapshot['volume_name'], snapshot['name']]))
             raise
 
     def create_export(self, _ctx, volume, connector):
@@ -480,7 +480,6 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
             lun = data[0]['lun']
 
             host = self.vip.split(',')[0] if self.vip else self.nef_host
-            LOG.warning(host)
             provider_location = '%(host)s:%(port)s,1 %(name)s %(lun)s' % {
                 'host': host,
                 'port': self.configuration.nexenta_iscsi_target_portal_port,
