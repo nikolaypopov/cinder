@@ -123,7 +123,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         return '%s/%s' % (self.volume, volume_name)
 
     def _create_target(self, target_idx):
-        target_name = '%s%s-%i' % (
+        target_name = '%s-%s-%i' % (
             self.configuration.nexenta_target_prefix,
             self.nms_host,
             target_idx
@@ -247,7 +247,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 LOG.info('Volume %s does not exist, it '
                          'seems it was already deleted.', volume_name)
                 return
-            if 'zvol has children' in exc.args[0]:
+            if 'has children' in exc.args[0]:
                 self._mark_as_garbage(volume_name)
                 LOG.info('Volume %s will be deleted later.', volume_name)
                 return
