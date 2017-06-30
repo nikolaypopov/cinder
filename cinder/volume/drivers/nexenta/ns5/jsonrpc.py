@@ -139,11 +139,12 @@ class RESTCaller(object):
 
 class HTTPSAuth(requests.auth.AuthBase):
 
-    def __init__(self, url, username, password):
+    def __init__(self, url, username, password, verify):
         self.url = url
         self.username = username
         self.password = password
         self.token = None
+        self.verify = verify
 
     def __eq__(self, other):
         return all([
@@ -188,7 +189,7 @@ class HTTPSAuth(requests.auth.AuthBase):
         url = '/'.join((self.url, 'auth/login'))
         headers = {'Content-Type': 'application/json'}
         data = {'username': self.username, 'password': self.password}
-        response = requests.post(url, json=data, verify=self.__proxy.verify,
+        response = requests.post(url, json=data, verify=self.verify,
                                  headers=headers, timeout=TIMEOUT)
         content = json.loads(response.content) if response.content else None
         LOG.debug("NS auth response: %(code)s %(reason)s %(content)s", {
@@ -222,7 +223,7 @@ class NexentaJSONProxy(object):
         if use_https:
             self.scheme = 'https'
             self.port = port if port else 8443
-            self.session.auth = HTTPSAuth(self.url, user, password)
+            self.session.auth = HTTPSAuth(self.url, user, password, verify)
         else:
             self.scheme = 'http'
             self.port = port if port else 8080

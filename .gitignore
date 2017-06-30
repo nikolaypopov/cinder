@@ -37,3 +37,5 @@ api-ref/build
 
 # Files created by releasenotes build
 releasenotes/build
+
+sftp-config*
