@@ -242,7 +242,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         volume_name = self._get_zvol_name(volume['name'])
         try:
             props = self.nms.zvol.get_child_props(volume_name, 'origin') or {}
-            self.nms.zvol.destroy(volume_name, '')
+            self.nms.zvol.destroy(volume_name, '-r')
         except exception.NexentaException as exc:
             if 'does not exist' in exc.args[0]:
                 LOG.info('Volume %s does not exist, it '
