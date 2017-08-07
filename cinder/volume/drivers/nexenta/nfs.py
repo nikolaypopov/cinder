@@ -146,7 +146,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
 
         if volume['status'] not in ('available', 'retyping'):
             LOG.warning("Volume status must be 'available' or 'retyping'."
-                            " Current volume status: %s", volume['status'])
+                        " Current volume status: %s", volume['status'])
             return false_ret
 
         if 'capabilities' not in host:
@@ -168,7 +168,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
         shares = []
         for bind in ssh_bindings:
             for share in ns_shares:
-                if (share.startswith(ssh_bindings[bind][3]) and
+                if (share.startswith(bind.split('@')[1].split(':')[0]) and
                         ns_shares[share] >= volume['size']):
                     shares.append(share)
         if len(shares) == 0:
