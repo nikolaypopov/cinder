@@ -106,7 +106,7 @@ class NexentaNfsDriver(nfs.NfsDriver,
         pool_name, fs = self._get_share_datasets(self.share)
         url = 'storage/pools/%s' % (pool_name)
         self.nef.get(url)
-        url = 'storage/pools/%s/filesystems/%s' % (pool_name, fs)
+        url = 'storage/filesystems/%s' % '%2F'.join([pool_name, fs])
         self.nef.get(url)
 
         path = '/'.join([pool_name, fs])
@@ -147,9 +147,9 @@ class NexentaNfsDriver(nfs.NfsDriver,
         pool, fs = self._get_share_datasets(self.share)
         filesystem = '%s/%s/%s' % (pool, fs, volume['name'])
         LOG.debug('Creating filesystem on NexentaStor %s', filesystem)
-        url = 'storage/pools/%s/filesystems' % pool
+        url = 'storage/filesystems'
         data = {
-            'name': '/'.join([fs, volume['name']]),
+            'path': '/'.join([pool, fs, volume['name']]),
             'compressionMode': self.dataset_compression,
             'dedupMode': self.dataset_deduplication,
         }
@@ -160,7 +160,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
                 LOG.info('Filesystem %s already exists, using it.', filesystem)
             else:
                 raise
-        # host = self.vip.split(',')[0] if self.vip else self.nef_host
         volume['provider_location'] = '%s:/%s/%s' % (
             self.nas_host, self.share, volume['name'])
         try:
@@ -173,8 +172,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
                        self.driver_prefix + '_sparsed_volumes'):
                 self._create_sparsed_file(self.local_path(volume), volume_size)
             else:
-                url = 'storage/pools/%s/filesystems/%s' % (
-                    pool, '%2F'.join([fs, volume['name']]))
+                url = 'storage/filesystems/%s' % (
+                    '%2F'.join([pool, fs, volume['name']]))
                 compression = self.nef.get(url).get('compressionMode')
                 if compression != 'off':
                     # Disable compression, because otherwise will not use space
@@ -190,8 +189,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
 
         except exception.NexentaException:
             try:
-                url = 'storage/pools/%s/filesystems/%s' % (
-                    pool, '%2F'.join([fs, volume['name']]))
+                url = 'storage/filesystems/%s' % (
+                    '%2F'.join([pool, fs, volume['name']]))
                 self.nef.delete(url)
             except exception.NexentaException:
                 LOG.warning("Cannot destroy created folder: "
@@ -200,16 +199,70 @@ class NexentaNfsDriver(nfs.NfsDriver,
                                 [fs, volume['name']])})
             raise
 
+    def migrate_volume(self, ctxt, volume, host):
+        """Migrate if volume and host are managed by Nexenta appliance.
+
+        :param ctxt: context
+        :param volume: a dictionary describing the volume to migrate
+        :param host: a dictionary describing the host to migrate to
+        """
+        LOG.debug('Enter: migrate_volume: id=%(id)s, host=%(host)s',
+                  {'id': volume['id'], 'host': host})
+
+        false_ret = (False, None)
+
+        if volume['status'] not in ('available', 'retyping'):
+            LOG.warning("Volume status must be 'available' or 'retyping'."
+                        " Current volume status: %s", volume['status'])
+            return false_ret
+
+        if 'capabilities' not in host:
+            LOG.warning("Unsupported host. No capabilities found")
+            return false_ret
+
+        capabilities = host['capabilities']
+        dst_driver_name = capabilities['location_info'].split(':')[0]
+        dst_fs = capabilities['location_info'].split(':/')[1]
+
+        if (capabilities.get('vendor_name') != 'Nexenta' or
+                dst_driver_name != self.__class__.__name__ or
+                capabilities['free_capacity_gb'] < volume['size']):
+            return false_ret
+
+        pool, fs = self._get_share_datasets(self.share)
+        url = 'hpr/services'
+        svc_name = 'cinder-migrate-%s' % volume['name']
+        data = {
+            'name': svc_name,
+            'sourceDataset': '/'.join([pool, fs, volume['name']]),
+            'destinationDataset': '/'.join([dst_fs, volume['name']]),
+            'isSource': True,
+            'type': 'scheduled',
+            'remoteNode': {
+                'host': capabilities['nef_url'],
+                'port': capabilities['nef_port']
+            }
+        }
+        self.nef.post(url, data)
+
+        url = 'hpr/services/%s/start' % svc_name
+        self.nef.post(url)
+        provider_location = '/'.join(
+            [capabilities['location_info'].split(':')[1], volume['name']])
+
+        url = 'hpr/services/%s' % svc_name
+        self.nef.delete(url)
+        return True, {'provider_location': provider_location}
+
     def delete_volume(self, volume):
         """Deletes a logical volume.
 
         :param volume: volume reference
         """
         pool, fs = self._get_share_datasets(self.share)
-        url = 'storage/pools/%(pool)s/filesystems/%(fs)s' % {
-            'pool': pool,
-            'fs': '%2F'.join([fs, volume['name']])
-        }
+        url = 'storage/filesystems/%s' % '%2F'.join(
+            [pool, fs, volume['name']])
+
         field = 'originalSnapshot'
         origin = self.nef.get('{}?fields={}'.format(url, field)).get(field)
         try:
@@ -251,11 +304,10 @@ class NexentaNfsDriver(nfs.NfsDriver,
         """
         volume = self._get_snapshot_volume(snapshot)
         pool, fs = self._get_share_datasets(self.share)
-        url = 'storage/pools/%(pool)s/filesystems/%(fs)s/snapshots' % {
-            'pool': pool,
-            'fs': '%2F'.join([fs, volume['name']]),
-        }
-        data = {'name': snapshot['name']}
+        url = 'storage/snapshots'
+
+        data = {'path': '%s@%s' % ('/'.join([pool, fs, volume['name']]),
+            snapshot['name'])}
         self.nef.post(url, data)
 
     def delete_snapshot(self, snapshot):
@@ -265,12 +317,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
         """
         volume = self._get_snapshot_volume(snapshot)
         pool, fs = self._get_share_datasets(self.share)
-        url = ('storage/pools/%(pool)s/'
-               'filesystems/%(fs)s/snapshots/%(snap)s') % {
-            'pool': pool,
-            'fs': '%2F'.join([fs, volume['name']]),
-            'snap': snapshot['name']
-        }
+        url = 'storage/snapshots/%s@%s' % ('%2F'.join([pool, fs, volume['name']]),
+            snapshot['name'])
         volume_path = '/'.join((self.share, volume['name']))
         try:
             self.nef.delete(url)
@@ -291,12 +339,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
 
         pool, fs = self._get_share_datasets(self.share)
         dataset_path = '%s/%s' % (pool, fs)
-        url = ('storage/pools/%(pool)s/'
-               'filesystems/%(fs)s/snapshots/%(snap)s/clone') % {
-            'pool': pool,
-            'fs': '%2F'.join([fs, snapshot_vol['name']]),
-            'snap': snapshot['name']
-        }
+        url = ('storage/snapshots/%s/clone') % (
+            '%2F'.join([pool, fs, snapshot_vol['name'], snapshot['name']]))
         path = '/'.join([pool, fs, volume['name']])
         data = {'targetPath': path}
         self.nef.post(url, data)
@@ -305,11 +349,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
             self._share_folder(fs, volume['name'])
         except exception.NexentaException:
             try:
-                url = ('storage/pools/%(pool)s/'
-                       'filesystems/%(fs)s') % {
-                    'pool': pool,
-                    'fs': volume['name']
-                }
+                url = ('storage/filesystems/') % (
+                    '%2F'.join([pool, fs, volume['name']]))
                 self.nef.delete(url)
             except exception.NexentaException:
                 LOG.warning("Cannot destroy cloned filesystem: "
@@ -378,8 +419,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
         pool = self.share.split('/')[0]
         LOG.debug(
             'Creating ACL for filesystem %s on Nexenta Store', filesystem)
-        url = 'storage/pools/%s/filesystems/%s/acl' % (
-            pool, '%2F'.join([path.replace('/', '%2F'), filesystem]))
+        url = 'storage//filesystems/%s/acl' % (
+            '%2F'.join([pool, path.replace('/', '%2F'), filesystem]))
         data = {
             "type": "allow",
             "principal": "everyone@",
@@ -419,8 +460,7 @@ class NexentaNfsDriver(nfs.NfsDriver,
         :param path: example pool/nfs
         """
         pool, fs = self._get_share_datasets(path)
-        url = 'storage/pools/%s/filesystems/%s' % (
-            pool, fs)
+        url = 'storage/filesystems/%s' % '%2F'.join([pool, fs])
         data = self.nef.get(url)
         total = utils.str2size(data['bytesAvailable'])
         allocated = utils.str2size(data['bytesUsed'])
@@ -450,7 +490,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
         total, free, allocated = self._get_capacity_info(self.share)
         total_space = utils.str2gib_size(total)
         free_space = utils.str2gib_size(free)
-        # host = self.vip.split(',')[0] if self.vip else self.nef_host
         share = ':/'.join([self.nas_host, self.share])
 
         location_info = '%(driver)s:%(share)s' % {
@@ -463,6 +502,7 @@ class NexentaNfsDriver(nfs.NfsDriver,
             'compression': self.dataset_compression,
             'description': self.dataset_description,
             'nef_url': self.nef_host,
+            'nef_port': self.nef_port,
             'driver_version': self.VERSION,
             'storage_protocol': 'NFS',
             'total_capacity_gb': total_space,
@@ -474,24 +514,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
             'nfs_mount_point_base': self.nfs_mount_point_base
         }
 
-    def get_delete_snapshot_url(self, zfs_object):
-        pool, fs, name = zfs_object.split('/')
-        vol, snap = name.split('@')
-        url = ('storage/pools/%(pool)s/'
-               'filesystems/%(fs)s/snapshots/%(snap)s') % {
-            'pool': pool,
-            'fs': '%2F'.join([fs, vol]),
-            'snap': snap
-        }
-        return url
-
     def get_original_snapshot_url(self, zfs_object):
-        pool, fs, name = zfs_object.split('/')
-        url = 'storage/pools/%(pool)s/filesystems/%(fs)s' % {
-            'pool': pool,
-            'fs': '%2F'.join([fs, name])
-        }
-        return url
+        return 'storage/snapshots/%s' % zfs_object.replace('/', '%2F')
 
     def get_delete_volume_url(self, zfs_object):
         return self.get_original_snapshot_url(zfs_object) + '?force=true'

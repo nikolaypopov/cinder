@@ -146,7 +146,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
 
         if volume['status'] not in ('available', 'retyping'):
             LOG.warning("Volume status must be 'available' or 'retyping'."
-                            " Current volume status: %s", volume['status'])
+                        " Current volume status: %s", volume['status'])
             return false_ret
 
         if 'capabilities' not in host:
@@ -279,7 +279,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
                         {
                             'src_backend': src_backend,
                             'dst_backend': dst_backend
-            })
+                        })
             return False
 
         hosts = (volume['host'], host['host'])
