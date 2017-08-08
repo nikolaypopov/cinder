@@ -504,27 +504,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         ctxt = context.get_admin_context()
         return db.volume_get(ctxt, snapshot['volume_id'])
 
-    def get_delete_snapshot_url(self, zfs_object):
-        pool, group, name = zfs_object.split('/')
-        vol, snap = name.split('@')
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s/'
-               'volumes/%(volume)s/snapshots/%(snap)s') % {
-            'pool': pool,
-            'group': group,
-            'volume': vol,
-            'snap': snap
-        }
-        return url
-
     def get_original_snapshot_url(self, zfs_object):
-        pool, group, name = zfs_object.split('/')
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s'
-               '/volumes/%(name)s') % {
-            'pool': pool,
-            'group': group,
-            'name': name
-        }
-        return url
+        return 'storage/snapshots/%s' % zfs_object.replace('/', '%2F')
 
     def get_delete_volume_url(self, zfs_object):
         return self.get_original_snapshot_url(zfs_object)
