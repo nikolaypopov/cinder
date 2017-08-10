@@ -280,7 +280,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
                             'src_backend': src_backend,
                             'dst_backend': dst_backend
                         })
-            return False
+            return False, model_update
 
         hosts = (volume['host'], host['host'])
         old, new = hosts

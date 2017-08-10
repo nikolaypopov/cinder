@@ -71,7 +71,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
         self.nfs_mount_point_base = self.configuration.nexenta_mount_point_base
         self.dataset_compression = (
             self.configuration.nexenta_dataset_compression)
-        self.dataset_deduplication = self.configuration.nexenta_dataset_dedup
         self.dataset_description = (
             self.configuration.nexenta_dataset_description)
         self.sparsed_volumes = self.configuration.nexenta_sparsed_volumes
@@ -121,20 +120,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
             raise LookupError(_("Dataset %s is not shared in Nexenta "
                                 "Store appliance") % path)
 
-    def initialize_connection(self, volume, connector):
-        """Allow connection to connector and return connection info.
-
-        :param volume: volume reference
-        :param connector: connector reference
-        """
-        data = {'export': volume['provider_location'], 'name': 'volume'}
-        if volume['provider_location'] in self.shares:
-            data['options'] = self.shares[volume['provider_location']]
-        return {
-            'driver_volume_type': self.driver_volume_type,
-            'data': data
-        }
-
     def create_volume(self, volume):
         """Creates a volume.
 
@@ -152,7 +137,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
         data = {
             'path': '/'.join([pool, fs, volume['name']]),
             'compressionMode': self.dataset_compression,
-            'dedupMode': self.dataset_deduplication,
         }
         try:
             self.nef.post(url, data)
@@ -237,23 +221,89 @@ class NexentaNfsDriver(nfs.NfsDriver,
             'name': svc_name,
             'sourceDataset': '/'.join([pool, fs, volume['name']]),
             'destinationDataset': '/'.join([dst_fs, volume['name']]),
-            'isSource': True,
             'type': 'scheduled',
-            'remoteNode': {
+            'sendShareNfs': True,
+        }
+        if capabilities['nef_url'] != self.nef_host:
+            data['isSource'] = True
+            data['remoteNode'] = {
                 'host': capabilities['nef_url'],
                 'port': capabilities['nef_port']
             }
-        }
         self.nef.post(url, data)
 
         url = 'hpr/services/%s/start' % svc_name
         self.nef.post(url)
-        provider_location = '/'.join(
-            [capabilities['location_info'].split(':')[1], volume['name']])
+        provider_location = '/'.join([
+            capabilities['location_info'].strip(dst_driver_name).strip(':'),
+            volume['name']])
 
-        url = 'hpr/services/%s' % svc_name
+        params = (
+            '?destroySourceSnapshots=true&destroyDestinationSnapshots=true')
+        url = 'hpr/services/%s%s' % (svc_name, params)
         self.nef.delete(url)
+
+        try:
+            self.delete_volume(volume)
+        except exception.NexentaException as exc:
+            LOG.warning("Cannot delete source volume %(volume)s on "
+                        "NexentaStor Appliance: %(exc)s",
+                        {'volume': volume['name'], 'exc': exc})
+
         return True, {'provider_location': provider_location}
+
+    def initialize_connection(self, volume, connector):
+        LOG.Info('Initialize volume connection for %s', volume['name'])
+        url = 'hpr/activate'
+        data = {'datasetName': volume['provider_location'].split(':/')[1]}
+        self.nef.post(url, data)
+        data = {'export': volume['provider_location'], 'name': 'volume'}
+        return {
+            'driver_volume_type': self.driver_volume_type,
+            'data': data
+        }
+
+    def retype(self, context, volume, new_type, diff, host):
+        """Convert the volume to be of the new type.
+
+        :param ctxt: Context
+        :param volume: A dictionary describing the volume to migrate
+        :param new_type: A dictionary describing the volume type to convert to
+        :param diff: A dictionary with the difference between the two types
+        :param host: A dictionary describing the host to migrate to, where
+                     host['host'] is its name, and host['capabilities'] is a
+                     dictionary of its reported capabilities.
+        """
+        LOG.debug('Retype volume request %(vol)s to be %(type)s '
+                  '(host: %(host)s), diff %(diff)s.',
+                  {'vol': volume['name'],
+                   'type': new_type,
+                   'host': host,
+                   'diff': diff})
+
+        retyped = False
+        migrated = False
+        model_update = None
+
+        src_driver = self.__class__.__name__
+        dst_driver = host['capabilities']['location_info'].split(':')[0]
+        if src_driver != dst_driver:
+            LOG.warning('Cannot retype from %(src_driver)s to '
+                        '%(dst_driver)s.',
+                        {
+                            'src_driver': src_driver,
+                            'dst_driver': dst_driver
+                        })
+            return False
+
+        old, new = (volume['host'], host['host'])
+        if old != new:
+            migrated, provider_location = self.migrate_volume(
+                context, volume, host)
+
+        if not migrated:
+            model_update = {'provider_location': volume['provider_location']}
+        return retyped or migrated, model_update
 
     def delete_volume(self, volume):
         """Deletes a logical volume.
@@ -308,7 +358,7 @@ class NexentaNfsDriver(nfs.NfsDriver,
         url = 'storage/snapshots'
 
         data = {'path': '%s@%s' % ('/'.join([pool, fs, volume['name']]),
-            snapshot['name'])}
+                                   snapshot['name'])}
         self.nef.post(url, data)
 
     def delete_snapshot(self, snapshot):
@@ -318,8 +368,8 @@ class NexentaNfsDriver(nfs.NfsDriver,
         """
         volume = self._get_snapshot_volume(snapshot)
         pool, fs = self._get_share_datasets(self.share)
-        url = 'storage/snapshots/%s@%s' % ('%2F'.join([pool, fs, volume['name']]),
-            snapshot['name'])
+        url = 'storage/snapshots/%s@%s' % ('%2F'.join(
+            [pool, fs, volume['name']]), snapshot['name'])
         volume_path = '/'.join((self.share, volume['name']))
         try:
             self.nef.delete(url)
@@ -499,7 +549,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
         }
         self._stats = {
             'vendor_name': 'Nexenta',
-            'dedup': self.dataset_deduplication,
             'compression': self.dataset_compression,
             'description': self.dataset_description,
             'nef_url': self.nef_host,
