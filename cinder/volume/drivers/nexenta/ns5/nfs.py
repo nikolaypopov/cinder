@@ -16,6 +16,7 @@
 import hashlib
 import os
 
+from eventlet import greenthread
 from oslo_log import log as logging
 from oslo_utils import units
 
@@ -224,13 +225,21 @@ class NexentaNfsDriver(nfs.NfsDriver,
             'type': 'scheduled',
             'sendShareNfs': True,
         }
+        nef_ips = capabilities['nef_url'].split(',')
         if capabilities['nef_url'] != self.nef_host:
             data['isSource'] = True
             data['remoteNode'] = {
-                'host': capabilities['nef_url'],
+                'host': nef_ips[0],
                 'port': capabilities['nef_port']
             }
-        self.nef.post(url, data)
+        try:
+            self.nef.post(url, data)
+        except exception.NexentaException as exc:
+            if 'ENOENT' in exc.args[0] and len(nef_ips) > 1:
+                data['remoteNode']['host'] = nef_ips[1]
+                self.nef.post(url, data)
+            else:
+                raise
 
         url = 'hpr/services/%s/start' % svc_name
         self.nef.post(url)
@@ -240,6 +249,21 @@ class NexentaNfsDriver(nfs.NfsDriver,
 
         params = (
             '?destroySourceSnapshots=true&destroyDestinationSnapshots=true')
+        in_progress = True
+        url = 'hpr/services/%s' % svc_name
+        timeout = 1
+        while in_progress:
+            state = self.nef.get(url)['state']
+            if state == 'disabled':
+                in_progress = False
+            elif state == 'enabled':
+                greenthread.sleep(timeout)
+                timeout = timeout * 2
+            else:
+                url = 'hpr/services/%s%s' % (svc_name, params)
+                self.nef.delete(url)
+                return false_ret
+
         url = 'hpr/services/%s%s' % (svc_name, params)
         self.nef.delete(url)
 
