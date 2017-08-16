@@ -100,9 +100,9 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         self.nef = jsonrpc.NexentaJSONProxy(
             host, self.nef_port, self.nef_user,
             self.nef_password, self.use_https, self.verify_ssl)
-        url = 'storage/pools/%s/volumeGroups' % self.storage_pool
+        url = 'storage/volumeGroups'
         data = {
-            'name': self.volume_group,
+            'path': '/'.join([self.storage_pool, self.volume_group]),
             'volumeBlockSize': (
                 self.configuration.nexenta_ns5_blocksize * units.Ki)
         }
@@ -129,10 +129,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
 
         :raise: :py:exc:`LookupError`
         """
-        url = 'storage/pools/%(pool)s/volumeGroups/%(group)s' % {
-            'pool': self.storage_pool,
-            'group': self.volume_group,
-        }
+        url = 'storage/volumeGroups/%s' % '%2F'.join([
+            self.storage_pool, self.volume_group])
         try:
             self.nef.get(url)
         except exception.NexentaException:
@@ -153,12 +151,10 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         :param volume: volume reference
         :return: model update dict for volume reference
         """
-        url = 'storage/pools/%(pool)s/volumeGroups/%(group)s/volumes' % {
-            'pool': self.storage_pool,
-            'group': self.volume_group,
-        }
+        url = 'storage/volumes'
+        path = '/'.join([self.storage_pool, self.volume_group, volume['name']])
         data = {
-            'name': volume['name'],
+            'path': path,
             'volumeSize': volume['size'] * units.Gi,
             'volumeBlockSize': (
                 self.configuration.nexenta_ns5_blocksize * units.Ki),
@@ -171,13 +167,9 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
 
         :param volume: volume reference
         """
-
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s'
-               '/volumes/%(name)s') % {
-            'pool': self.storage_pool,
-            'group': self.volume_group,
-            'name': volume['name']
-        }
+        path = '%2F'.join([
+            self.storage_pool, self.volume_group, volume['name']])
+        url = 'storage/volumes/%s' % path
         field = 'originalSnapshot'
         origin = self.nef.get('{}?fields={}'.format(url, field)).get(field)
         try:
@@ -196,12 +188,10 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         """
         LOG.info('Extending volume: %(id)s New size: %(size)s GB',
                  {'id': volume['id'], 'size': new_size})
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s/'
-               'volumes/%(name)s') % {
-            'pool': self.storage_pool,
-            'group': self.volume_group,
-            'name': volume['name']
-        }
+        path = '%2F'.join([
+            self.storage_pool, self.volume_group, volume['name']])
+        url = 'storage/volumes/%s' % path
+
         self.nef.put(url, {'volumeSize': new_size * units.Gi})
 
     def create_snapshot(self, snapshot):
@@ -215,14 +205,9 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
             'vol': snapshot_vol['name']
         })
         volume_path = self._get_volume_path(snapshot_vol)
-        pool, group, volume = volume_path.split('/')
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s/'
-               'volumes/%(volume)s/snapshots') % {
-            'pool': pool,
-            'group': group,
-            'volume': snapshot_vol['name']
-        }
-        self.nef.post(url, {'name': snapshot['name']})
+        url = 'storage/snapshots'
+        data = '%s@%s' % (volume_path, snapshot['name'])
+        self.nef.post(url, data)
 
     def delete_snapshot(self, snapshot):
         """Delete volume's snapshot on appliance.
@@ -233,13 +218,10 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         snapshot_vol = self._get_snapshot_volume(snapshot)
         volume_path = self._get_volume_path(snapshot_vol)
         pool, group, volume = volume_path.split('/')
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s/'
-               'volumes/%(volume)s/snapshots/%(snapshot)s') % {
-            'pool': pool,
-            'group': group,
-            'volume': volume,
-            'snapshot': snapshot['name']
-        }
+        path = '%2F'.join([
+            self.storage_pool, self.volume_group, volume['name'],
+            snapshot['name']])
+        url = 'storage/snapshots/%s' % path
         try:
             self.nef.delete(url)
         except exception.NexentaException as exc:
@@ -258,13 +240,10 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         snapshot_vol = self._get_snapshot_volume(snapshot)
         volume_path = self._get_volume_path(snapshot_vol)
         pool, group, snapshot_vol = volume_path.split('/')
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s/'
-               'volumes/%(volume)s/snapshots/%(snapshot)s/clone') % {
-            'pool': pool,
-            'group': group,
-            'volume': snapshot_vol,
-            'snapshot': snapshot['name']
-        }
+        path = '%2F'.join([
+            self.storage_pool, self.volume_group, volume['name'],
+            snapshot['name']])
+        url = 'storage/snapshots/%s/clone' % path
         self.nef.post(url, {'targetPath': self._get_volume_path(volume)})
         if (('size' in volume) and (
                 volume['size'] > snapshot['volume_size'])):
@@ -357,11 +336,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         """Retrieve stats info for NexentaStor appliance."""
         LOG.debug('Updating volume stats')
 
-        url = ('storage/pools/%(pool)s/volumeGroups/%(group)s'
-               '?fields=bytesAvailable,bytesUsed') % {
-            'pool': self.storage_pool,
-            'group': self.volume_group,
-        }
+        url = 'storage/volumeGroups/%s?fields=bytesAvailable,bytesUsed' % (
+            '%2F'.join([self.storage_pool, self.volume_group]))
         stats = self.nef.get(url)
         total_amount = utils.str2gib_size(stats['bytesAvailable'])
         free_amount = utils.str2gib_size(
