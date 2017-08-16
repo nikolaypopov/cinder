@@ -414,8 +414,9 @@ class NexentaNfsDriver(nfs.NfsDriver,
 
         pool, fs = self._get_share_datasets(self.share)
         dataset_path = '%s/%s' % (pool, fs)
+        fs_path = '%2F'.join([pool, fs, snapshot_vol['name']])
         url = ('storage/snapshots/%s/clone') % (
-            '%2F'.join([pool, fs, snapshot_vol['name'], snapshot['name']]))
+            '@'.join([fs_path, snapshot['name']]))
         path = '/'.join([pool, fs, volume['name']])
         data = {'targetPath': path}
         self.nef.post(url, data)
