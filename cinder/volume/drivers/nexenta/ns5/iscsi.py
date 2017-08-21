@@ -206,7 +206,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         })
         volume_path = self._get_volume_path(snapshot_vol)
         url = 'storage/snapshots'
-        data = '%s@%s' % (volume_path, snapshot['name'])
+        data = {'path': '%s@%s' % (volume_path, snapshot['name'])}
         self.nef.post(url, data)
 
     def delete_snapshot(self, snapshot):
