@@ -218,10 +218,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         snapshot_vol = self._get_snapshot_volume(snapshot)
         volume_path = self._get_volume_path(snapshot_vol)
         pool, group, volume = volume_path.split('/')
-        path = '%2F'.join([
-            self.storage_pool, self.volume_group, volume['name'],
-            snapshot['name']])
-        url = 'storage/snapshots/%s' % path
+        path = '%2F'.join([self.storage_pool, self.volume_group, volume])
+        url = 'storage/snapshots/%s@%s' % (path, snapshot['name'])
         try:
             self.nef.delete(url)
         except exception.NexentaException as exc:
