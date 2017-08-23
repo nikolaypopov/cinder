@@ -239,9 +239,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         volume_path = self._get_volume_path(snapshot_vol)
         pool, group, snapshot_vol = volume_path.split('/')
         path = '%2F'.join([
-            self.storage_pool, self.volume_group, volume['name'],
-            snapshot['name']])
-        url = 'storage/snapshots/%s/clone' % path
+            self.storage_pool, self.volume_group, volume['name']])
+        url = 'storage/snapshots/%s@%s/clone' % (path, snapshot['name'])
         self.nef.post(url, {'targetPath': self._get_volume_path(volume)})
         if (('size' in volume) and (
                 volume['size'] > snapshot['volume_size'])):
