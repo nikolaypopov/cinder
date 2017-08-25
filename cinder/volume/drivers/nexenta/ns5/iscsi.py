@@ -58,7 +58,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         self.nef = None
         # mapping of targets and groups. Groups are the keys
         self.targets = {}
-        # list of volumes in target group. Groups are the keys
+        # list of volumes mapped to target group. Groups are the keys
         self.volumes = {}
         if self.configuration:
             self.configuration.append_config_values(
@@ -125,7 +125,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
                 self._fill_volumes(tg_name)
 
     def check_for_setup_error(self):
-        """Verify that the zfs volumes exist.
+        """Verify that the zfs pool, vg and iscsi service exists.
 
         :raise: :py:exc:`LookupError`
         """
@@ -170,15 +170,34 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         path = '%2F'.join([
             self.storage_pool, self.volume_group, volume['name']])
         url = 'storage/volumes/%s' % path
-        field = 'originalSnapshot'
-        origin = self.nef.get('{}?fields={}'.format(url, field)).get(field)
+        origin = self.nef.get(url).get('originalSnapshot')
         try:
+            url = 'storage/volumes/%s?snapshots=true' % path
             self.nef.delete(url)
         except exception.NexentaException as exc:
-            vol_path = self._get_volume_path(volume)
-            self.destroy_later_or_raise(exc, vol_path)
-            return
-        self.collect_zfs_garbage(origin)
+            if 'Failed to destroy snap' in exc.kwargs['message']['message']:
+                url = 'storage/snapshots?parent=%s' % path
+                snap_list = []
+                snap_map = {}
+                for snap in self.nef.get(url)['data']:
+                    snap_list.append(snap['path'])
+                for snap in snap_list:
+                    url = 'storage/snapshots/%s' % snap.replace('/', '%2F')
+                    data = self.nef.get(url)
+                    if data['clones']:
+                        snap_map[data['creationTxg']] = snap
+                snap = snap_map[max(snap_map)]
+                url = 'storage/snapshots/%s' % snap.replace('/', '%2F')
+                clone = self.nef.get(url)['clones'][0]
+                url = 'storage/volumes/%s/promote' % clone.replace('/', '%2F')
+                self.nef.post(url)
+                url = 'storage/volumes/%s?snapshots=true' % path
+                self.nef.delete(url)
+            else:
+                raise
+        if origin:
+            url = 'storage/snapshots/%s' % origin.replace('/', '%2F')
+            self.nef.delete(url)
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
@@ -236,10 +255,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         """
         LOG.info('Creating volume from snapshot: %s', snapshot['name'])
         snapshot_vol = self._get_snapshot_volume(snapshot)
-        volume_path = self._get_volume_path(snapshot_vol)
-        pool, group, snapshot_vol = volume_path.split('/')
         path = '%2F'.join([
-            self.storage_pool, self.volume_group, volume['name']])
+            self.storage_pool, self.volume_group, snapshot_vol['name']])
         url = 'storage/snapshots/%s@%s/clone' % (path, snapshot['name'])
         self.nef.post(url, {'targetPath': self._get_volume_path(volume)})
         if (('size' in volume) and (
@@ -453,8 +470,6 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
                 data = self.nef.get(vol_map_url).get('data')
             lun = data[0]['lun']
 
-            # host = self.vip.split(',')[0] if self.vip else self.nef_host
-            # LOG.warning(host)
             provider_location = '%(host)s:%(port)s,1 %(name)s %(lun)s' % {
                 'host': self.iscsi_host,
                 'port': self.configuration.nexenta_iscsi_target_portal_port,
