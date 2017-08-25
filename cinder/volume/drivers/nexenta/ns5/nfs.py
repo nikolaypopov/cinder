@@ -26,7 +26,6 @@ from cinder import exception
 from cinder.i18n import _
 from cinder import interface
 from cinder.volume.drivers.nexenta.ns5 import jsonrpc
-from cinder.volume.drivers.nexenta.ns5 import zfs_garbage_collector
 from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
 from cinder.volume.drivers import nfs
@@ -36,8 +35,7 @@ LOG = logging.getLogger(__name__)
 
 
 @interface.volumedriver
-class NexentaNfsDriver(nfs.NfsDriver,
-                       zfs_garbage_collector.ZFSGarbageCollectorMixIn):
+class NexentaNfsDriver(nfs.NfsDriver):
     """Executes volume driver commands on Nexenta Appliance.
 
     Version history:
@@ -59,7 +57,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
 
     def __init__(self, *args, **kwargs):
         super(NexentaNfsDriver, self).__init__(*args, **kwargs)
-        zfs_garbage_collector.ZFSGarbageCollectorMixIn.__init__(self)
         if self.configuration:
             self.configuration.append_config_values(
                 options.NEXENTA_CONNECTION_OPTS)
@@ -346,7 +343,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
             vol_path = '/'.join((self.share, volume['name']))
             self.destroy_later_or_raise(exc, vol_path)
             return
-        self.collect_zfs_garbage(origin)
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
@@ -401,7 +397,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
             self.destroy_later_or_raise(
                 exc, '@'.join((volume_path, snapshot['name'])))
             return
-        self.collect_zfs_garbage(volume_path)
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create new volume from other's snapshot on appliance.
@@ -455,8 +450,6 @@ class NexentaNfsDriver(nfs.NfsDriver,
         self.create_snapshot(snapshot)
         try:
             pl = self.create_volume_from_snapshot(volume, snapshot)
-            self.mark_as_garbage('{}/{}@{}'.format(
-                self.share, src_vref['name'], snapshot['name']))
             return pl
         except exception.NexentaException:
             LOG.error('Volume creation failed, deleting created snapshot '
