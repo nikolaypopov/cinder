@@ -24,7 +24,6 @@ from cinder.i18n import _
 from cinder import interface
 from cinder.volume import driver
 from cinder.volume.drivers.nexenta.ns5 import jsonrpc
-from cinder.volume.drivers.nexenta.ns5 import zfs_garbage_collector
 from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
 import uuid
@@ -35,8 +34,7 @@ TARGET_GROUP_PREFIX = 'cinder-tg-'
 
 
 @interface.volumedriver
-class NexentaISCSIDriver(driver.ISCSIDriver,
-                         zfs_garbage_collector.ZFSGarbageCollectorMixIn):
+class NexentaISCSIDriver(driver.ISCSIDriver):
     """Executes volume driver commands on Nexenta Appliance.
 
     Version history:
@@ -54,7 +52,6 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
 
     def __init__(self, *args, **kwargs):
         super(NexentaISCSIDriver, self).__init__(*args, **kwargs)
-        zfs_garbage_collector.ZFSGarbageCollectorMixIn.__init__(self)
         self.nef = None
         # mapping of targets and groups. Groups are the keys
         self.targets = {}
@@ -195,7 +192,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
                 self.nef.delete(url)
             else:
                 raise
-        if origin:
+        if origin and 'clone' in origin:
             url = 'storage/snapshots/%s' % origin.replace('/', '%2F')
             self.nef.delete(url)
 
@@ -245,7 +242,6 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
             self.destroy_later_or_raise(
                 exc, '@'.join((volume_path, snapshot['name'])))
             return
-        self.collect_zfs_garbage(volume_path)
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create new volume from other's snapshot on appliance.
@@ -278,8 +274,6 @@ class NexentaISCSIDriver(driver.ISCSIDriver,
         self.create_snapshot(snapshot)
         try:
             self.create_volume_from_snapshot(volume, snapshot)
-            self.mark_as_garbage('@'.join(
-                (self._get_volume_path(src_vref), snapshot['name'])))
         except exception.NexentaException:
             LOG.error('Volume creation failed, deleting created snapshot '
                       '%s', '@'.join([snapshot['volume_name'],
