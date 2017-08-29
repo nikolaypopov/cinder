@@ -336,13 +336,36 @@ class NexentaNfsDriver(nfs.NfsDriver):
             [pool, fs, volume['name']])
 
         field = 'originalSnapshot'
-        origin = self.nef.get('{}?fields={}'.format(url, field)).get(field)
+        origin = self.nef.get(url).get(field)
         try:
             self.nef.delete(url)
         except exception.NexentaException as exc:
-            vol_path = '/'.join((self.share, volume['name']))
-            self.destroy_later_or_raise(exc, vol_path)
-            return
+            if 'Failed to destroy snap' in exc.kwargs['message']['message']:
+                url = 'storage/snapshots?parent=%s' % '%2F'.join(
+                    [pool, fs, volume['name']])
+                snap_list = []
+                snap_map = {}
+                for snap in self.nef.get(url)['data']:
+                    snap_list.append(snap['path'])
+                for snap in snap_list:
+                    url = 'storage/snapshots/%s' % snap.replace('/', '%2F')
+                    data = self.nef.get(url)
+                    if data['clones']:
+                        snap_map[data['creationTxg']] = snap
+                snap = snap_map[max(snap_map)]
+                url = 'storage/snapshots/%s' % snap.replace('/', '%2F')
+                clone = self.nef.get(url)['clones'][0]
+                url = 'storage/filesystems/%s/promote' % clone.replace(
+                    '/', '%2F')
+                self.nef.post(url)
+                url = 'storage/filesystems/%s?snapshots=true' % '%2F'.join(
+                    [pool, fs, volume['name']])
+                self.nef.delete(url)
+            else:
+                raise
+        if origin and 'clone' in origin:
+            url = 'storage/snapshots/%s' % origin.replace('/', '%2F')
+            self.nef.delete(url)
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
