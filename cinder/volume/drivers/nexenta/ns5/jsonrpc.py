@@ -94,7 +94,8 @@ class RESTCaller(object):
         try:
             check_error(response)
         except exception.NexentaException as exc:
-            if exc.kwargs['message']['code'] == 'ENOENT':
+            if (exc.kwargs['message']['source'] == 'zpool' and
+                    exc.kwargs['message']['code'] == 'ENOENT'):
                 self.handle_failover()
                 url = self.get_full_url(args[0])
                 LOG.debug('NexentaException call to NS: %s %s, data: %s',
