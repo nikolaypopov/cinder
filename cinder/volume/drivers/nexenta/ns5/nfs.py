@@ -337,6 +337,8 @@ class NexentaNfsDriver(nfs.NfsDriver):
 
         field = 'originalSnapshot'
         origin = self.nef.get(url).get(field)
+        url = 'storage/filesystems/%s?snapshots=true' % '%2F'.join(
+            [pool, fs, volume['name']])
         try:
             self.nef.delete(url)
         except exception.NexentaException as exc:
@@ -413,12 +415,9 @@ class NexentaNfsDriver(nfs.NfsDriver):
         pool, fs = self._get_share_datasets(self.share)
         url = 'storage/snapshots/%s@%s' % ('%2F'.join(
             [pool, fs, volume['name']]), snapshot['name'])
-        volume_path = '/'.join((self.share, volume['name']))
         try:
             self.nef.delete(url)
-        except exception.NexentaException as exc:
-            self.destroy_later_or_raise(
-                exc, '@'.join((volume_path, snapshot['name'])))
+        except exception.NexentaException:
             return
 
     def create_volume_from_snapshot(self, volume, snapshot):
