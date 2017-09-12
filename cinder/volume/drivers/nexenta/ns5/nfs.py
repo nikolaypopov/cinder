@@ -281,7 +281,8 @@ class NexentaNfsDriver(nfs.NfsDriver):
         data = {'export': volume['provider_location'], 'name': 'volume'}
         return {
             'driver_volume_type': self.driver_volume_type,
-            'data': data
+            'data': data,
+            'mount_point_base': self.nfs_mount_point_base
         }
 
     def retype(self, context, volume, new_type, diff, host):
@@ -581,27 +582,34 @@ class NexentaNfsDriver(nfs.NfsDriver):
         total, free, allocated = self._get_capacity_info(self.share)
         total_space = utils.str2gib_size(total)
         free_space = utils.str2gib_size(free)
+        allocated_space = utils.str2gib_size(allocated)
         share = ':/'.join([self.nas_host, self.share])
+        pool_name, fs = self._get_share_datasets(self.share)
 
         location_info = '%(driver)s:%(share)s' % {
             'driver': self.__class__.__name__,
             'share': share
         }
+        pool = {
+            'pool_name': pool_name,
+            'total_capacity_gb': total_space,
+            'free_capacity_gb': free_space,
+            'allocated_capacity_gb': allocated_space,
+            'reserved_percentage': self.configuration.reserved_percentage,
+            'QoS_support': False,
+            'location_info': location_info,
+            'volume_backend_name': self.backend_name,
+            'compression': self.dataset_compression,
+        }
         self._stats = {
             'vendor_name': 'Nexenta',
-            'compression': self.dataset_compression,
             'description': self.dataset_description,
             'nef_url': self.nef_host,
             'nef_port': self.nef_port,
             'driver_version': self.VERSION,
             'storage_protocol': 'NFS',
-            'total_capacity_gb': total_space,
-            'free_capacity_gb': free_space,
-            'reserved_percentage': self.configuration.reserved_percentage,
-            'QoS_support': False,
-            'location_info': location_info,
-            'volume_backend_name': self.backend_name,
-            'nfs_mount_point_base': self.nfs_mount_point_base
+            'nfs_mount_point_base': self.nfs_mount_point_base,
+            'pools': [pool]
         }
 
     def get_original_snapshot_url(self, zfs_object):
