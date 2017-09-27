@@ -16,6 +16,7 @@
 from oslo_log import log as logging
 from oslo_serialization import jsonutils
 import requests
+import six
 
 from cinder import exception
 from cinder.utils import retry
@@ -76,9 +77,13 @@ class NexentaJSONProxy(object):
         })
 
         LOG.debug('Sending JSON data: %s', data)
-        r = self.session.post(self.url, data=data, timeout=TIMEOUT)
-        response = r.json()
 
+        try:
+            r = self.session.post(self.url, data=data, timeout=TIMEOUT)
+        except Exception as e:
+            raise exception.NexentaException(six.text_type(e))
+
+        response = r.json()
         LOG.debug('Got response: %s', response)
         if response.get('error') is not None:
             message = response['error'].get('message', '')

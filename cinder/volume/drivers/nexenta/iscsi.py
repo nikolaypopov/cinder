@@ -228,11 +228,20 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         :param volume: volume reference
         :return: model update dict for volume reference
         """
-        self.nms.zvol.create(
-            self._get_zvol_name(volume['name']),
-            '%sG' % (volume['size'],),
-            six.text_type(self.configuration.nexenta_blocksize),
-            self.configuration.nexenta_sparse)
+        zvol_name = self._get_zvol_name(volume['name'])
+        if self.nms.zvol.object_exists(zvol_name):
+            LOG.debug('Volume %s already exixts', zvol_name)
+            return
+        try:
+            self.nms.zvol.create(zvol_name, '%sG' % (volume['size'],),
+                six.text_type(self.configuration.nexenta_blocksize),
+                self.configuration.nexenta_sparse)
+        except exception.NexentaException as e:
+            LOG.error('Failed to create volume %(host)s:%(vol)s: %(err)s.', {
+                      'host': self.nms_host,
+                      'vol': zvol_name,
+                      'err': six.text_type(e)})
+            raise
 
     def extend_volume(self, volume, new_size):
         """Extend an existing volume.
@@ -668,8 +677,17 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         """Retrieve stats info for NexentaStor appliance."""
         LOG.debug('Updating volume stats')
 
-        stats = self.nms.volume.get_child_props(
-            self.configuration.nexenta_volume, 'health|size|used|available')
+        try:
+            stats = self.nms.volume.get_child_props(
+                self.configuration.nexenta_volume,
+                'health|size|used|available')
+        except exception.NexentaException as e:
+            LOG.error('Failed to update status for volume '
+                      '%(host)s:%(volume)s: %(error)s.', {
+                      'host': self.nms_host,
+                      'volume': self.volume,
+                      'error': six.text_type(e)})
+            raise
 
         total_amount = utils.str2gib_size(stats['size'])
         free_amount = utils.str2gib_size(stats['available'])
