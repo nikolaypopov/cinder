@@ -326,7 +326,8 @@ class NexentaNfsDriver(nfs.NfsDriver):
         data = {'export': volume['provider_location'], 'name': 'volume'}
         return {
             'driver_volume_type': self.driver_volume_type,
-            'data': data
+            'data': data,
+            'mount_point_base': self.nfs_mount_point_base
         }
 
     def retype(self, context, volume, new_type, diff, host):
