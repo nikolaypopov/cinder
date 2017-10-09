@@ -397,7 +397,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         :param volume: reference of volume to be exported
         """
         volume_path = self._get_volume_path(volume)
-        lpr = self.configuration.nexenta_luns_per_target
+        lpt = self.configuration.nexenta_luns_per_target
 
         # Find out whether the volume is exported
         vol_map_url = 'san/lunMappings?volume={}&fields=lun'.format(
@@ -409,7 +409,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             # Choose the best target group among existing ones
             tg_name = None
             for tg in self.volumes.keys():
-                if len(self.volumes[tg]) < lpr:
+                if len(self.volumes[tg]) < lpt:
                     tg_name = tg
                     break
             if tg_name:
@@ -454,7 +454,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             # Get LUN of just created volume
             data = self.nef.get(vol_map_url).get('data')
             counter = 0
-            while not data and counter < lpr:
+            while not data and counter < lpt:
                 greenthread.sleep(1)
                 counter += 1
                 data = self.nef.get(vol_map_url).get('data')
