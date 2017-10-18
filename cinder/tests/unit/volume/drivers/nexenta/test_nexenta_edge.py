@@ -76,6 +76,7 @@ class TestNexentaEdgeISCSIDriver(test.TestCase):
         self.cfg.nexenta_iscsi_service = NEDGE_SERVICE
         self.cfg.nexenta_blocksize = NEDGE_BLOCKSIZE
         self.cfg.nexenta_chunksize = NEDGE_CHUNKSIZE
+        self.cfg.replication_device = None
 
         mock_exec = mock.Mock()
         mock_exec.return_value = ('', '')
@@ -165,6 +166,11 @@ class TestNexentaEdgeISCSIDriver(test.TestCase):
         self.assertRaises(exception.VolumeBackendAPIException,
                           self.driver.do_setup, self.context)
 
+    def check_for_setup_error(self):
+        self.mock_api.side_effect = exception.VolumeBackendAPIException
+        self.assertRaises(exception.VolumeBackendAPIException,
+                          self.driver.check_for_setup_error)
+
     def test_create_volume(self):
         self.driver.create_volume(MOCK_VOL)
         self.mock_api.assert_called_with(NEDGE_URL, {
@@ -251,11 +257,11 @@ class TestNexentaEdgeISCSIDriver(test.TestCase):
 
     def test_create_cloned_volume(self):
         self.driver.create_cloned_volume(MOCK_VOL2, MOCK_VOL)
-        self.mock_api.assert_called_with(NEDGE_URL, {
-            'objectPath': NEDGE_BUCKET + '/' + MOCK_VOL2['id'],
-            'volSizeMB': MOCK_VOL2['size'] * 1024,
-            'blockSize': NEDGE_BLOCKSIZE,
-            'chunkSize': NEDGE_CHUNKSIZE
+        url = '%s/snapshot/clone' % NEDGE_URL
+        self.mock_api.assert_called_with(url, {
+            'objectPath': NEDGE_BUCKET + '/' + MOCK_VOL['id'],
+            'clonePath': NEDGE_BUCKET + '/' + MOCK_VOL2['id'],
+            'snapName': 'cinder-clone-snapshot-vol2'
         })
 
     def test_create_cloned_volume_larger(self):

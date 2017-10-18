@@ -188,6 +188,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
 
     def _ensure_share_unmounted(self, nfs_share, mount_path=None):
         """Ensure that NFS share is unmounted on the host.
+
         :param nfs_share: NFS share name
         :param mount_path: mount path on the host
         """
