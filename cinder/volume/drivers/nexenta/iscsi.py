@@ -272,8 +272,11 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             try:
                 self.nms.snapshot.destroy(origin, '')
             except exception.NexentaException as exc:
-                if 'has children' in exc.args[0]:
-                    LOG.info('Volume %s will be deleted later.', volume_name)
+                if 'does not exist' in exc.args[0]:
+                    LOG.info('Snapshot %s does not exist, it was '
+                             'already deleted.', origin)
+                    return
+                raise
 
     def create_cloned_volume(self, volume, src_vref):
         """Creates a clone of the specified volume.
