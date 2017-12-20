@@ -1,4 +1,4 @@
-# Copyright 2013 Nexenta Systems, Inc.
+# Copyright 2017 Nexenta Systems, Inc.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -42,7 +42,7 @@ def str2size(s, scale=1024):
 
     groups = match.groups()
     value = float(groups[0])
-    suffix = len(groups) > 1 and groups[1].upper() or 'B'
+    suffix = groups[1].upper() if groups[1] else 'B'
 
     types = ('B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y')
     for i, t in enumerate(types):
