@@ -93,9 +93,10 @@ class NexentaNfsDriver(nfs.NfsDriver):
 
     def do_setup(self, context):
         host = self.nef_host or self.nas_host
+        pool_name, fs = self._get_share_datasets(self.share)
         self.nef = jsonrpc.NexentaJSONProxy(
             host, self.nef_port, self.nef_user,
-            self.nef_password, self.use_https, self.verify_ssl)
+            self.nef_password, self.use_https, pool_name, self.verify_ssl)
 
     def check_for_setup_error(self):
         """Verify that the volume for our folder exists.
