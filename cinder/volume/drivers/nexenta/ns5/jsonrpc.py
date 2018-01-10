@@ -147,7 +147,31 @@ class RESTCaller(object):
             self.__proxy.__init__(
                 host, self.__proxy.port, self.__proxy.user,
                 self.__proxy.password, self.__proxy.use_https,
-                self.__proxy.verify)
+                self.__proxy.pool, self.__proxy.verify)
+            url = self.get_full_url('rsf/clusters')
+            response = self.__proxy.session.get(
+                url, verify=self.__proxy.verify)
+            content = response.json() if response.content else None
+            cluster_name = content['data'][0]['clusterName']
+            for node in content['data'][0]['nodes']:
+                if node['ipAddress'] == self.__proxy.host:
+                    node_name = node['machineName']
+            counter = 0
+            while counter < 10:
+                counter += 1
+                url = self.get_full_url(
+                    'rsf/clusters/%s/services' % cluster_name)
+                response = self.__proxy.session.get(url)
+                content = response.json() if response.content else None
+                for service in content['data']:
+                    if service['serviceName'] == self.__proxy.pool:
+                        for mapping in service['vips'][0]['nodeMapping']:
+                            if (mapping['node'] == node_name and
+                                    mapping['status'] == 'up'):
+                                return
+                interval = 2  # TODO configurable param
+                LOG.debug('Pool not ready, sleeping for %ss' % interval)
+                time.sleep(2)
         else:
             raise
 
@@ -225,9 +249,10 @@ class HTTPSAuth(requests.auth.AuthBase):
 
 class NexentaJSONProxy(object):
 
-    def __init__(self, host, port, user, password, use_https, verify):
+    def __init__(self, host, port, user, password, use_https, pool, verify):
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})
+        self.pool = pool
         self.user = user
         self.verify = verify
         self.password = password
