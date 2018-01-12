@@ -337,6 +337,8 @@ class NexentaNfsDriver(nfs.NfsDriver):
         :param volume: volume reference
         """
         pool, fs = self._get_share_datasets(self.share)
+        self._ensure_share_unmounted('%s:/%s/%s' % (
+            self.nas_host, self.share, volume['name']))
         url = 'storage/filesystems/%s' % '%2F'.join(
             [pool, fs, volume['name']])
 
