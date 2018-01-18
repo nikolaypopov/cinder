@@ -166,8 +166,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         if data:
             origin = data[0].get('originalSnapshot')
         else:
-            LOG.info(_LI('Volume %s does not exist, it seems it was '
-                         'already deleted.'), volume['name'])
+            LOG.info(_('Volume %s does not exist, it seems it was '
+                       'already deleted.'), volume['name'])
             return
         try:
             url = 'storage/volumes/%s?snapshots=true' % path
