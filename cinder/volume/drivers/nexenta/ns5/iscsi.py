@@ -163,13 +163,19 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         """
         path = '%2F'.join([
             self.storage_pool, self.volume_group, volume['name']])
-        url = 'storage/volumes/%s' % path
-        origin = self.nef.get(url).get('originalSnapshot')
+        url = 'storage/volumes?path=%s' % path
+        data = self.nef.get(url).get('data')
+        if data:
+            origin = data[0].get('originalSnapshot')
+        else:
+            LOG.info(_LI('Volume %s does not exist, it seems it was '
+                         'already deleted.'), volume['name'])
+            return
         try:
             url = 'storage/volumes/%s?snapshots=true' % path
             self.nef.delete(url)
         except exception.NexentaException as exc:
-            if 'Failed to destroy snap' in exc.kwargs['message']:
+            if 'Failed to destroy snap' in exc.kwargs['message']['message']:
                 url = 'storage/snapshots?parent=%s' % path
                 snap_map = {}
                 for snap in self.nef.get(url)['data']:
