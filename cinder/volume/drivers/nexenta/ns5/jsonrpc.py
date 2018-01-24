@@ -159,7 +159,7 @@ class RESTCaller(object):
                 if node['ipAddress'] == self.__proxy.host:
                     node_name = node['machineName']
             counter = 0
-            while counter < 10:
+            while counter < 24:
                 counter += 1
                 url = self.get_full_url(
                     'rsf/clusters/%s/services' % cluster_name)
@@ -171,9 +171,9 @@ class RESTCaller(object):
                             if (mapping['node'] == node_name and
                                     mapping['status'] == 'up'):
                                 return
-                interval = 2  # TODO configurable param
+                interval = 5
                 LOG.debug('Pool not ready, sleeping for %ss' % interval)
-                time.sleep(2)
+                time.sleep(interval)
         else:
             raise
 
