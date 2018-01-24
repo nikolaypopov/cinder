@@ -75,8 +75,8 @@ class TestNexentaISCSIDriver(test.TestCase):
         self.cfg.nexenta_rest_port = 2000
         self.cfg.nexenta_use_https = False
         self.cfg.nexenta_iscsi_target_portal_port = 8080
-        self.cfg.nexenta_target_prefix = 'iqn:'
-        self.cfg.nexenta_target_group_prefix = 'cinder/'
+        self.cfg.nexenta_target_prefix = 'iqn:cinder'
+        self.cfg.nexenta_target_group_prefix = 'cinder-'
         self.cfg.nexenta_ns5_blocksize = 32
         self.cfg.nexenta_sparse = True
         self.cfg.nexenta_dataset_compression = 'on'
@@ -85,6 +85,8 @@ class TestNexentaISCSIDriver(test.TestCase):
         self.cfg.nexenta_volume = 'pool'
         self.cfg.nexenta_luns_per_target = 20
         self.cfg.driver_ssl_cert_verify = False
+        self.cfg.nexenta_iscsi_target_portals = ''
+        self.cfg.nexenta_iscsi_target_host_group = 'all'
         self.cfg.nexenta_rest_address = '1.1.1.1'
         self.cfg.nexenta_volume_group = 'vg'
         self.nef_mock = mock.Mock()
@@ -207,7 +209,7 @@ class TestNexentaISCSIDriver(test.TestCase):
 
     @patch('uuid.uuid4', fake_uuid4().next)
     def test_do_export(self):
-        target_name = 'iqn:%s' % '38d18a48b7914046b523a84aad966310'
+        target_name = 'iqn:cinder-%s' % '38d18a48b7914046b523a84aad966310'
         lun = 0
 
         class GetSideEffect(object):
@@ -216,7 +218,7 @@ class TestNexentaISCSIDriver(test.TestCase):
 
             def __call__(self, *args, **kwargs):
                 # Find out whether the volume is exported
-                if 'san/lunMappings?volume=' in args[0]:
+                if 'san/lunMappings' in args[0]:
                     self.lm_counter += 1
                     # a value for the first call
                     if self.lm_counter == 0:
@@ -226,6 +228,9 @@ class TestNexentaISCSIDriver(test.TestCase):
                 # Get the name of just created target
                 elif 'san/iscsi/targets' in args[0]:
                     return {'data': [{'name': target_name}]}
+                elif 'san/targetgroups' in args[0]:
+                    return {'data': [
+                        {'name': 'cinder-tg-1', 'members': [target_name]}]}
 
         def post_side_effect(*args, **kwargs):
             if 'san/iscsi/targets' in args[0]:
@@ -234,7 +239,7 @@ class TestNexentaISCSIDriver(test.TestCase):
         self.nef_mock.get.side_effect = GetSideEffect()
         self.nef_mock.post.side_effect = post_side_effect
         res = self.drv._do_export(self.ctxt, self.TEST_VOLUME_REF)
-        provider_location = '%(host)s:%(port)s,1 %(name)s %(lun)s' % {
+        provider_location = '%(host)s:%(port)s %(name)s %(lun)s' % {
             'host': self.cfg.nexenta_host,
             'port': self.cfg.nexenta_iscsi_target_portal_port,
             'name': target_name,
