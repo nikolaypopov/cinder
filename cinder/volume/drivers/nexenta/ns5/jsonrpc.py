@@ -154,26 +154,32 @@ class RESTCaller(object):
             response = self.__proxy.session.get(
                 url, verify=self.__proxy.verify)
             content = response.json() if response.content else None
+            if not content:
+                raise exception.NexentaException(response)
             cluster_name = content['data'][0]['clusterName']
             for node in content['data'][0]['nodes']:
                 if node['ipAddress'] == self.__proxy.host:
                     node_name = node['machineName']
             counter = 0
+            interval = 5
+            url = self.get_full_url(
+                'rsf/clusters/%s/services' % cluster_name)
             while counter < 24:
                 counter += 1
-                url = self.get_full_url(
-                    'rsf/clusters/%s/services' % cluster_name)
                 response = self.__proxy.session.get(url)
                 content = response.json() if response.content else None
-                for service in content['data']:
-                    if service['serviceName'] == self.__proxy.pool:
-                        for mapping in service['vips'][0]['nodeMapping']:
-                            if (mapping['node'] == node_name and
-                                    mapping['status'] == 'up'):
-                                return
-                interval = 5
+                if content:
+                    for service in content['data']:
+                        if service['serviceName'] == self.__proxy.pool:
+                            for mapping in service['vips'][0]['nodeMapping']:
+                                if (mapping['node'] == node_name and
+                                        mapping['status'] == 'up'):
+                                    return
                 LOG.debug('Pool not ready, sleeping for %ss' % interval)
                 time.sleep(interval)
+            raise exception.NexentaException(
+                'Waited for %ss, but pool %s service is still not running' % (
+                    counter * interval, self.__proxy.pool))
         else:
             raise
 
