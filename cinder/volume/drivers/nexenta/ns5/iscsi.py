@@ -100,8 +100,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
     def do_setup(self, context):
         host = self.nef_host or self.iscsi_host
         self.nef = jsonrpc.NexentaJSONProxy(
-            host, self.nef_port, self.nef_user,
-            self.nef_password, self.use_https, self.verify_ssl)
+            host, self.nef_port, self.nef_user, self.nef_password,
+            self.use_https, self.storage_pool, self.verify_ssl)
         url = 'storage/volumeGroups'
         data = {
             'path': '/'.join([self.storage_pool, self.volume_group]),
