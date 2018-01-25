@@ -33,6 +33,7 @@ from cinder.volume.drivers import nfs
 
 VERSION = '1.4.0'
 LOG = logging.getLogger(__name__)
+BLOCK_SIZE_MB = 1
 
 
 @interface.volumedriver
@@ -171,7 +172,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
                         # Backup default compression value if it was changed.
                         self.nef.put(url, {'compressionMode': compression})
 
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             try:
                 url = 'storage/filesystems/%s' % (
                     '%2F'.join([pool, fs, volume['name']]))
@@ -181,7 +182,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
                             "%(vol)s/%(folder)s",
                             {'vol': pool, 'folder': '/'.join(
                                 [fs, volume['name']])})
-            raise
+            raise exc
 
     def _ensure_share_unmounted(self, nfs_share, mount_path=None):
         """Ensure that NFS share is unmounted on the host.
@@ -386,14 +387,14 @@ class NexentaNfsDriver(nfs.NfsDriver):
                           self.local_path(volume),
                           run_as_root=self._execute_as_root)
         else:
-            block_size_mb = 1
             block_count = ((new_size - volume['size']) * units.Gi //
-                           (block_size_mb * units.Mi))
+                           (BLOCK_SIZE_MB * units.Mi))
             self._execute(
                 'dd', 'if=/dev/zero',
-                'seek=%d' % (volume['size'] * units.Gi / block_size_mb),
+                'seek=%d' % volume['size'] * units.Gi / (
+                    BLOCK_SIZE_MB * units.Mi),
                 'of=%s' % self.local_path(volume),
-                'bs=%dM' % block_size_mb,
+                'bs=%dM' % BLOCK_SIZE_MB,
                 'count=%d' % block_count,
                 run_as_root=True)
 
@@ -444,7 +445,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
 
         try:
             self._share_folder(fs, volume['name'])
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             try:
                 url = ('storage/filesystems/') % (
                     '%2F'.join([pool, fs, volume['name']]))
@@ -454,7 +455,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
                             "%(vol)s/%(filesystem)s",
                             {'vol': dataset_path,
                              'filesystem': volume['name']})
-            raise
+            raise exc
         if volume['size'] > snapshot['volume_size']:
             new_size = volume['size']
             volume['size'] = snapshot['volume_size']
@@ -477,7 +478,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
         try:
             pl = self.create_volume_from_snapshot(volume, snapshot)
             return pl
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             LOG.error('Volume creation failed, deleting created snapshot '
                       '%(volume_name)s@%(name)s', snapshot)
             try:
@@ -485,7 +486,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
             except (exception.NexentaException, exception.SnapshotIsBusy):
                 LOG.warning('Failed to delete zfs snapshot '
                             '%(volume_name)s@%(name)s', snapshot)
-            raise
+            raise exc
 
     def local_path(self, volume):
         """Get volume path (mounted locally fs path) for given volume.
