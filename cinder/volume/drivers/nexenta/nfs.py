@@ -573,7 +573,6 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
         :param path: path to new file
         :param size: size of file
         """
-        BLOCK_SIZE_MB = 1
         block_count = size * units.Gi / (BLOCK_SIZE_MB * units.Mi)
 
         LOG.info('Creating regular file: %s.'
