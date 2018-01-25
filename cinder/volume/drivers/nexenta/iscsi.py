@@ -296,7 +296,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         self.create_snapshot(snapshot)
         try:
             self.create_volume_from_snapshot(volume, snapshot)
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             with excutils.save_and_reraise_exception():
                 LOG.exception('Volume creation failed, deleting created '
                               'snapshot %(volume_name)s@%(name)s', snapshot)
@@ -305,7 +305,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             except (exception.NexentaException, exception.SnapshotIsBusy):
                 LOG.warning('Failed to delete zfs snapshot '
                             '%(volume_name)s@%(name)s', snapshot)
-            raise
+            raise exc
 
     def _get_zfs_send_recv_cmd(self, src, dst):
         """Returns rrmgr command for source and destination."""
@@ -543,7 +543,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         targets = self.nms.stmf.list_targets()
         if not targets:
             return False
-        return (target in self.nms.stmf.list_targets())
+        return (target in targets)
 
     def _target_group_exists(self, target_group):
         """Check if target group exist.

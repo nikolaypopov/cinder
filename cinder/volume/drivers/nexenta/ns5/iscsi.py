@@ -266,7 +266,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         self.create_snapshot(snapshot)
         try:
             self.create_volume_from_snapshot(volume, snapshot)
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             LOG.error('Volume creation failed, deleting created snapshot '
                       '%s', '@'.join([snapshot['volume_name'],
                                      snapshot['name']]))
@@ -276,7 +276,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 LOG.warning('Failed to delete zfs snapshot '
                             '%s', '@'.join([snapshot['volume_name'],
                                            snapshot['name']]))
-            raise
+            raise exc
 
     def create_export(self, _ctx, volume, connector):
         """Create new export for zfs volume.
