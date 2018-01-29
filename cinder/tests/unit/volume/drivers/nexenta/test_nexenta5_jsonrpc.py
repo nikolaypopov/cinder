@@ -89,7 +89,7 @@ class TestNexentaJSONProxyAuth(test.TestCase):
                 return r
 
         nef = jsonrpc.NexentaJSONProxy(HOST, port, USERNAME, PASSWORD,
-                                       use_https, ssl)
+                                       use_https, 'pool', ssl)
         adapter = TestAdapter()
         nef.session.mount('{}://{}:{}/{}'.format('https', HOST, port, rnd_url),
                           adapter)
@@ -113,7 +113,7 @@ class TestNexentaJSONProxy(test.TestCase):
     def setUp(self):
         super(TestNexentaJSONProxy, self).setUp()
         self.nef = jsonrpc.NexentaJSONProxy(
-            HOST, 0, USERNAME, PASSWORD, False, False)
+            HOST, 0, USERNAME, PASSWORD, False, 'pool', False)
 
     def gen_adapter(self, code, json=None):
         class TestAdapter(adapters.HTTPAdapter):
