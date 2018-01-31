@@ -62,6 +62,9 @@ NEXENTA_CONNECTION_OPTS = [
     cfg.BoolOpt('nexenta_use_https',
                 default=True,
                 help='Use secure HTTP for REST connection (default True)'),
+    cfg.BoolOpt('nexenta_lu_writebackcache_disabled',
+                default=False,
+                help='Postponed write to backing store or not'),
     cfg.StrOpt('nexenta_user',
                default='admin',
                help='User name to connect to Nexenta SA'),
@@ -116,6 +119,9 @@ NEXENTA_NFS_OPTS = [
                      'sparsed files that take no space. If disabled '
                      '(False), volume is created as a regular file, '
                      'which takes a long time.'),
+    cfg.BoolOpt('nexenta_qcow2_volumes',
+                default=False,
+                help='Create volumes as QCOW2 files rather than raw files'),
     cfg.BoolOpt('nexenta_nms_cache_volroot',
                 default=True,
                 help=('If set True cache NexentaStor appliance volroot option '
