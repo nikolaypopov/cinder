@@ -122,8 +122,8 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         if self.folder:
             folder = '%s/%s' % (self.volume, self.folder)
             if not self.nms.folder.object_exists(folder):
-                raise LookupError(_("Folder %s does not exist in Nexenta "
-                                    "Store appliance"), folder)
+                raise LookupError(_("Folder %s does not exist in NexentaStor "
+                                    "appliance"), folder)
 
     def _get_zvol_name(self, volume_name):
         """Return zvol name that corresponds given volume name."""
