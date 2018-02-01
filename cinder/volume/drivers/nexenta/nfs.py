@@ -34,6 +34,7 @@ from cinder.volume.drivers import nfs
 
 VERSION = '1.3.2'
 LOG = logging.getLogger(__name__)
+BLOCK_SIZE_MB = 1
 
 
 @interface.volumedriver
@@ -366,14 +367,14 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
                                                                      volume)
                 self._ensure_share_mounted(sub_share, mnt_path)
             self._get_capacity_info(nfs_share)
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             try:
                 nms.folder.destroy('%s/%s' % (vol, folder))
             except exception.NexentaException:
                 LOG.warning("Cannot destroy created folder: "
                             "%(vol)s/%(folder)s",
                             {'vol': vol, 'folder': folder})
-            raise
+            raise exc
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create new volume from other's snapshot on appliance.
@@ -396,14 +397,14 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
 
         try:
             self._share_folder(nms, vol, folder)
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             try:
                 nms.folder.destroy('%s/%s' % (vol, folder), '')
             except exception.NexentaException:
                 LOG.warning("Cannot destroy cloned folder: "
                             "%(vol)s/%(folder)s",
                             {'vol': vol, 'folder': folder})
-            raise
+            raise exc
 
         if self._get_nfs_server_version(nfs_share) < 4:
             sub_share, mnt_path = self._get_subshare_mount_point(nfs_share,
@@ -433,7 +434,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
         self.create_snapshot(snapshot)
         try:
             return self.create_volume_from_snapshot(volume, snapshot)
-        except exception.NexentaException:
+        except exception.NexentaException as exc:
             LOG.error('Volume creation failed, deleting created snapshot '
                       '%(volume_name)s@%(name)s', snapshot)
             try:
@@ -441,7 +442,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
             except (exception.NexentaException, exception.SnapshotIsBusy):
                 LOG.warning('Failed to delete zfs snapshot '
                             '%(volume_name)s@%(name)s', snapshot)
-            raise
+            raise exc
 
     def delete_volume(self, volume):
         """Deletes a logical volume.
@@ -493,16 +494,16 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
                    self.driver_prefix + '_sparsed_volumes'):
             self._create_sparsed_file(nms, volume_path, new_size)
         else:
-            block_size_mb = 1
             block_count = ((new_size - volume['size']) * units.Gi /
-                           (block_size_mb * units.Mi))
+                           (BLOCK_SIZE_MB * units.Mi))
 
             nms.appliance.execute(
                 'dd if=/dev/zero seek=%(seek)d of=%(path)s'
                 ' bs=%(bs)dM count=%(count)d' % {
-                    'seek': volume['size'] * units.Gi / block_size_mb,
+                    'seek': volume['size'] * units.Gi / (
+                        BLOCK_SIZE_MB * units.Mi),
                     'path': volume_path,
-                    'bs': block_size_mb,
+                    'bs': BLOCK_SIZE_MB,
                     'count': block_count
                 }
             )
@@ -572,8 +573,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
         :param path: path to new file
         :param size: size of file
         """
-        block_size_mb = 1
-        block_count = size * units.Gi / (block_size_mb * units.Mi)
+        block_count = size * units.Gi / (BLOCK_SIZE_MB * units.Mi)
 
         LOG.info('Creating regular file: %s.'
                  'This may take some time.', path)
@@ -581,7 +581,7 @@ class NexentaNfsDriver(nfs.NfsDriver):  # pylint: disable=R0921
         nms.appliance.execute(
             'dd if=/dev/zero of=%(path)s bs=%(bs)dM count=%(count)d' % {
                 'path': path,
-                'bs': block_size_mb,
+                'bs': BLOCK_SIZE_MB,
                 'count': block_count
             }
         )
