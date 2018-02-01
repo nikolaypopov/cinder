@@ -20,7 +20,7 @@ import time
 from oslo_log import log as logging
 
 from cinder import exception
-from cinder.i18n import _, _LI
+from cinder.i18n import _
 from cinder.utils import retry
 from oslo_serialization import jsonutils
 from requests.cookies import extract_cookies_to_jar
@@ -141,15 +141,43 @@ class RESTCaller(object):
 
     def handle_failover(self):
         if self.__proxy.backup:
-            LOG.info(_LI('Server %(primary)s is unavailable, '
-                         'failing over to %(backup)s'), {
-                'primary': self.__proxy.host,
-                'backup': self.__proxy.backup})
+            LOG.info('Server %s is unavailable, failing over to %s',
+                     self.__proxy.host, self.__proxy.backup)
             host = '%s,%s' % (self.__proxy.backup, self.__proxy.host)
             self.__proxy.__init__(
                 host, self.__proxy.port, self.__proxy.user,
                 self.__proxy.password, self.__proxy.use_https,
-                self.__proxy.verify)
+                self.__proxy.pool, self.__proxy.verify)
+            url = self.get_full_url('rsf/clusters')
+            response = self.__proxy.session.get(
+                url, verify=self.__proxy.verify)
+            content = response.json() if response.content else None
+            if not content:
+                raise exception.NexentaException(response)
+            cluster_name = content['data'][0]['clusterName']
+            for node in content['data'][0]['nodes']:
+                if node['ipAddress'] == self.__proxy.host:
+                    node_name = node['machineName']
+            counter = 0
+            interval = 5
+            url = self.get_full_url(
+                'rsf/clusters/%s/services' % cluster_name)
+            while counter < 24:
+                counter += 1
+                response = self.__proxy.session.get(url)
+                content = response.json() if response.content else None
+                if content:
+                    for service in content['data']:
+                        if service['serviceName'] == self.__proxy.pool:
+                            for mapping in service['vips'][0]['nodeMapping']:
+                                if (mapping['node'] == node_name and
+                                        mapping['status'] == 'up'):
+                                    return
+                LOG.debug('Pool not ready, sleeping for %ss' % interval)
+                time.sleep(interval)
+            raise exception.NexentaException(
+                'Waited for %ss, but pool %s service is still not running' % (
+                    counter * interval, self.__proxy.pool))
         else:
             raise
 
@@ -227,9 +255,10 @@ class HTTPSAuth(requests.auth.AuthBase):
 
 class NexentaJSONProxy(object):
 
-    def __init__(self, host, port, user, password, use_https, verify):
+    def __init__(self, host, port, user, password, use_https, pool, verify):
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})
+        self.pool = pool
         self.user = user
         self.verify = verify
         self.password = password
