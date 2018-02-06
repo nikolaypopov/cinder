@@ -331,7 +331,9 @@ class NexentaNfsDriver(nfs.NfsDriver):
     def initialize_connection(self, volume, connector):
         LOG.debug('Initialize volume connection for %s', volume['name'])
         url = 'hpr/activate'
-        data = {'datasetName': volume['provider_location'].split(':/')[1]}
+        pool, fs = self.share.split('/', 1)
+        data = {'datasetName': '%s/%s/%s' % (
+            pool, fs, volume['name'])}
         self.nef.post(url, data)
         data = {'export': volume['provider_location'], 'name': 'volume'}
         return {
