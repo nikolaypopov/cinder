@@ -32,7 +32,7 @@ from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
 from cinder.volume.drivers import nfs
 
-VERSION = '1.4.0'
+VERSION = '1.4.1'
 LOG = logging.getLogger(__name__)
 BLOCK_SIZE_MB = 1
 
@@ -49,6 +49,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
                 Added abandoned volumes and snapshots cleanup.
         1.3.0 - Failover support.
         1.4.0 - Migrate volume support and new NEF API calls.
+        1.4.1 - Revert to snapshot support.
     """
 
     driver_prefix = 'nexenta'
@@ -433,6 +434,16 @@ class NexentaNfsDriver(nfs.NfsDriver):
             self.nef.delete(url)
         except exception.NexentaException:
             return
+
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert volume to snapshot."""
+        pool, fs = self._get_share_datasets(self.share)
+        fs_path = '%2F'.join([pool, fs, volume['name']])
+        LOG.debug('Reverting volume %s to snapshot %s.' % (
+            fs_path, snapshot['name']))
+        url = 'storage/filesystems/%s/rollback' % urllib.parse.quote_plus(
+            fs_path)
+        self.nef.post(url, {'snapshot': snapshot['name']})
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create new volume from other's snapshot on appliance.

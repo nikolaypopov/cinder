@@ -30,7 +30,7 @@ from cinder.volume.drivers.nexenta.ns5 import jsonrpc
 from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
 
-VERSION = '1.3.1'
+VERSION = '1.3.2'
 LOG = logging.getLogger(__name__)
 
 
@@ -48,6 +48,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         1.3.0 - Removed target/TG caching, added support for target portals
                 and host groups.
         1.3.1 - Refactored _do_export to query exact lunMapping.
+        1.3.2 - Revert to snapshot support.
     """
 
     VERSION = VERSION
@@ -242,6 +243,14 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             self.nef.delete(url)
         except exception.NexentaException:
             return
+
+    def revert_to_snapshot(self, context, volume, snapshot):
+        """Revert volume to snapshot."""
+        volume_path = self._get_volume_path(volume)
+        LOG.debug('Reverting volume %s to snapshot %s.' % (
+            volume_path, snapshot['name']))
+        url = 'storage/volumes/%s/rollback' % volume_path
+        self.nef.post(url, {'snapshot': snapshot['name']})
 
     def create_volume_from_snapshot(self, volume, snapshot):
         """Create new volume from other's snapshot on appliance.
