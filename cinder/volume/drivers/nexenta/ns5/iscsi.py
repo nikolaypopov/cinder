@@ -339,6 +339,18 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                     LOG.debug('LU already deleted from appliance')
                 else:
                     raise
+        target_name = self.target_prefix + '-' + volume['name']
+        url = 'san/iscsi/targets/%s' % target_name
+        try:
+            self.nef.get(url)
+        except exception.NexentaException as e:
+            if 'ENOENT' in e.args[0]:
+                LOG.debug('iSCSI target %s is already deleted, skipping' % (
+                    target_name))
+                return
+            else:
+                raise
+        self.nef.delete(url)
 
     def get_volume_stats(self, refresh=False):
         """Get volume stats.
@@ -401,6 +413,24 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         :param volume: reference of volume to be exported
         """
         volume_path = self._get_volume_path(volume)
+        # Check whether the volume is exported
+        url = 'san/lunMappings?volume=%s' % urllib.parse.quote_plus(
+            volume_path)
+        data = self.nef.get(url).get('data')
+        if data and not data[0]['targetGroup'].lower() == 'all':
+            tg_data = self.nef.get(
+                'san/targetgroups?name=%s' % urllib.parse.quote_plus(
+                    data[0]['targetGroup']))
+            target_name = tg_data['data'][0]['members'][0]
+            provider_location = (
+                '%(host)s:%(port)s %(name)s %(lun)s') % {
+                'host': self.iscsi_host,
+                'port': self.portal_port,
+                'name': target_name,
+                'lun': data[0]['lun'],
+            }
+            return {'provider_location': provider_location}
+
         # Create new target and TG
         target_name = self.target_prefix + '-' + volume['name']
         url = 'san/iscsi/targets'
