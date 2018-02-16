@@ -28,7 +28,7 @@ from cinder.volume.drivers.nexenta.ns5 import jsonrpc
 from cinder.volume.drivers.nexenta import options
 from cinder.volume.drivers.nexenta import utils
 
-VERSION = '1.3.2'
+VERSION = '1.4.0'
 LOG = logging.getLogger(__name__)
 
 
@@ -47,6 +47,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
                 and host groups.
         1.3.1 - Refactored _do_export to query exact lunMapping.
         1.3.2 - Revert to snapshot support.
+        1.4.0 - Separate iSCSI target for each volume.
     """
 
     VERSION = VERSION
