@@ -13,8 +13,6 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import uuid
-
 from eventlet import greenthread
 from oslo_log import log as logging
 from oslo_utils import units
@@ -88,6 +86,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             self.configuration.nexenta_dataset_description)
         self.iscsi_target_portal_port = (
             self.configuration.nexenta_iscsi_target_portal_port)
+        self.tg = self.configuration.nexenta_target_group
 
     @property
     def backend_name(self):
@@ -114,6 +113,13 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         except exception.NexentaException as e:
             if 'EEXIST' in e.args[0]:
                 LOG.debug('volumeGroup already exists, skipping')
+            else:
+                raise
+        try:
+            self.nef.post('san/targetgroups', {'name': self.tg})
+        except exception.NexentaException as e:
+            if 'EEXIST' in e.args[0]:
+                LOG.debug('Target group %s already exists, skipping' % self.tg)
             else:
                 raise
 
@@ -389,118 +395,42 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         """Return name for snapshot that will be used to clone the volume."""
         return 'cinder-clone-snapshot-%(id)s' % volume
 
-    def _get_target_group_name(self, target_name):
-        """Return Nexenta iSCSI target group name for volume."""
-        return target_name.replace(
-            self.configuration.nexenta_target_prefix,
-            self.configuration.nexenta_target_group_prefix
-        )
-
-    def _check_target_and_portals(self, tg):
-        members = self.nef.get('san/targetgroups/%s' % urllib.parse.quote_plus(
-            tg)).get('members')
-        target_name = members[0] if members else ''
-        if target_name:
-            target = self.nef.get('san/iscsi/targets/%s' % target_name)
-            for portal in target['portals']:
-                if portal['address'] == self.iscsi_host:
-                    return target_name
-        return ''
-
     def _do_export(self, _ctx, volume):
         """Do all steps to get zfs volume exported at separate target.
 
         :param volume: reference of volume to be exported
         """
         volume_path = self._get_volume_path(volume)
-        lpt = self.configuration.nexenta_luns_per_target
-        # Check whether the volume is exported
-        url = 'san/lunMappings?volume=%s' % urllib.parse.quote_plus(
-            volume_path)
-        data = self.nef.get(url).get('data')
-        if data and not data[0]['targetGroup'].lower() == 'all':
-            tg_data = self.nef.get(
-                'san/targetgroups?name=%s' % urllib.parse.quote_plus(
-                    data[0]['targetGroup']))
-            target_name = tg_data['data'][0]['members'][0]
-            provider_location = (
-                '%(host)s:%(port)s %(name)s %(lun)s') % {
-                'host': self.iscsi_host,
-                'port': self.portal_port,
-                'name': target_name,
-                'lun': data[0]['lun'],
-            }
-            return {'provider_location': provider_location}
-
-        # Find correct TG with the fewest LUNs
-        url = 'san/targetgroups'
-        tg_list = [
-            tg for tg in self.nef.get(url)['data'] if tg['name'].startswith(
-                self.configuration.nexenta_target_group_prefix)]
-        if tg_list:
-            for tg in tg_list:
-                tg_name = tg['name']
-                url = 'san/lunMappings?targetGroup=%s' % tg_name
-                if len(self.nef.get(url).get('data')) < lpt:
-                    if not tg['members']:
-                        target_name = tg_name.replace(
-                            self.configuration.nexenta_target_group_prefix,
-                            self.configuration.nexenta_target_prefix)
-                        url = 'san/iscsi/targets'
-                        portals = []
-                        if self.portals:
-                            for portal in self.portals.split(','):
-                                address, port = portal.split(':')
-                                port = int(port) if port else 3260
-                                portals.append({
-                                    'address': address,
-                                    'port': port
-                                })
-                        if not portals:
-                            portals = [{"address": self.iscsi_host}]
-                        data = {
-                            "portals": portals,
-                            'name': target_name
-                        }
-                        self.nef.post(url, data)
-                        url = 'san/targetgroups/%s' % tg_name
-                        data = {'members': [target_name]}
-                        self.nef.put(url, data)
-                    else:
-                        target_name = tg['members'][0]
-                    break
-        else:
-            # Create new target and TG
-            target_name = self.target_prefix + '-' + uuid.uuid4().hex
-            url = 'san/iscsi/targets'
-            portals = []
-            if self.portals:
-                for portal in self.portals.split(','):
-                    address, port = portal.split(':')
-                    port = int(port) if port else 3260
-                    portals.append({
-                        'address': address,
-                        'port': port
-                    })
-            if not portals:
-                portals = [{"address": self.iscsi_host}]
-            data = {
-                "portals": portals,
-                'name': target_name
-            }
-            try:
-                self.nef.post(url, data)
-            except exception.NexentaException as e:
-                if 'EEXIST' not in e.args[0]:
-                    raise
-            tg_name = self._get_target_group_name(target_name)
-            self._create_target_group(tg_name, target_name)
+        # Create new target and TG
+        target_name = self.target_prefix + '-' + volume['name']
+        url = 'san/iscsi/targets'
+        portals = []
+        if self.portals:
+            for portal in self.portals.split(','):
+                address, port = portal.split(':')
+                port = int(port) if port else 3260
+                portals.append({
+                    'address': address,
+                    'port': port
+                })
+        if not portals:
+            portals = [{"address": self.iscsi_host}]
+        data = {
+            "portals": portals,
+            'name': target_name
+        }
+        try:
+            self.nef.post(url, data)
+        except exception.NexentaException as e:
+            if 'EEXIST' not in e.args[0]:
+                raise
+        self._add_target_to_tg(self.tg, target_name)
 
         # Export the volume
         url = 'san/lunMappings'
         data = {
             "hostGroup": self.host_group,
-            "targetGroup": tg_name,
+            "targetGroup": self.tg,
             'volume': volume_path
         }
         self.nef.post(url, data)
@@ -510,7 +440,7 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
             urllib.parse.quote_plus(volume_path))
         data = self.nef.get(vol_map_url).get('data')
         counter = 0
-        while not data and counter < lpt:
+        while not data and counter < 20:
             greenthread.sleep(1)
             counter += 1
             data = self.nef.get(vol_map_url).get('data')
@@ -530,14 +460,13 @@ class NexentaISCSIDriver(driver.ISCSIDriver):
         }
         return {'provider_location': provider_location}
 
-    def _create_target_group(self, tg_name, target_name):
+    def _add_target_to_tg(self, tg_name, target_name):
         # Create new target group
-        url = 'san/targetgroups'
+        url = 'san/targetgroups/%s' % tg_name
         data = {
-            'name': tg_name,
             'members': [target_name]
         }
-        self.nef.post(url, data)
+        self.nef.put(url, data)
 
     def _get_snapshot_volume(self, snapshot):
         ctxt = context.get_admin_context()
