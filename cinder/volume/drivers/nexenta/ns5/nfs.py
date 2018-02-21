@@ -147,17 +147,17 @@ class NexentaNfsDriver(nfs.NfsDriver):
                     'Filesystem %s already exists, using it.'), filesystem)
             else:
                 raise
-        volume['provider_location'] = '%s:/%s/%s' % (
+        share_path = self._get_share_path(
             self.nas_host, self.share, volume['name'])
         try:
             self._share_folder(fs, volume['name'])
-            self._ensure_share_mounted('%s:/%s/%s' % (
-                self.nas_host, self.share, volume['name']))
+            self._ensure_share_mounted(share_path)
 
             volume_size = volume['size']
             if getattr(self.configuration,
                        self.driver_prefix + '_sparsed_volumes'):
-                self._create_sparsed_file(self.local_path(volume), volume_size)
+                self._create_sparsed_file(
+                    self.local_path(share_path), volume_size)
             else:
                 url = 'storage/filesystems/%s' % (
                     '%2F'.join([pool, fs, volume['name']]))
@@ -168,12 +168,11 @@ class NexentaNfsDriver(nfs.NfsDriver):
                     self.nef.put(url, {'compressionMode': 'off'})
                 try:
                     self._create_regular_file(
-                        self.local_path(volume), volume_size)
+                        self.local_path(share_path), volume_size)
                 finally:
                     if compression != 'off':
                         # Backup default compression value if it was changed.
                         self.nef.put(url, {'compressionMode': compression})
-
         except exception.NexentaException:
             try:
                 url = 'storage/filesystems/%s' % (
@@ -185,6 +184,8 @@ class NexentaNfsDriver(nfs.NfsDriver):
                             {'vol': pool, 'folder': '/'.join(
                                 [fs, volume['name']])})
             raise
+        else:
+            volume['provider_location'] = share_path
 
     def _ensure_share_unmounted(self, nfs_share, mount_path=None):
         """Ensure that NFS share is unmounted on the host.
@@ -330,7 +331,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
     def initialize_connection(self, volume, connector):
         LOG.debug('Initialize volume connection for %s', volume['name'])
         url = 'hpr/activate'
-        data = {'datasetName': volume['provider_location'].split(':/')[1]}
+        data = {'datasetName': '%s/%s' % (self.share, volume['name'])}
         self.nef.post(url, data)
         data = {'export': volume['provider_location'], 'name': 'volume'}
         return {
@@ -347,11 +348,12 @@ class NexentaNfsDriver(nfs.NfsDriver):
         pool, fs = self._get_share_datasets(self.share)
         self._ensure_share_unmounted('%s:/%s/%s' % (
             self.nas_host, self.share, volume['name']))
-        url = 'storage/filesystems/%s' % '%2F'.join(
+        url = 'storage/filesystems?path=%s' % '%2F'.join(
             [pool, fs, volume['name']])
-
-        field = 'originalSnapshot'
-        origin = self.nef.get(url).get(field)
+        data = self.nef.get(url)['data']
+        if not data:
+            return
+        origin = data[0].get('originalSnapshot')
         url = 'storage/filesystems/%s?snapshots=true' % '%2F'.join(
             [pool, fs, volume['name']])
         try:
@@ -390,11 +392,12 @@ class NexentaNfsDriver(nfs.NfsDriver):
         """
         LOG.info(_LI('Extending volume: %(id)s New size: %(size)s GB'),
                  {'id': volume.id, 'size': new_size})
-        self._ensure_share_mounted('%s:/%s/%s' % (
-            self.nas_host, self.share, volume['name']))
+        share_path = self._get_share_path(
+            self.nas_host, self.share, volume['name'])
+        self._ensure_share_mounted(share_path)
         if self.sparsed_volumes:
             self._execute('truncate', '-s', '%sG' % new_size,
-                          self.local_path(volume),
+                          self.local_path(share_path),
                           run_as_root=self._execute_as_root)
         else:
             block_size_mb = 1
@@ -403,7 +406,7 @@ class NexentaNfsDriver(nfs.NfsDriver):
             self._execute(
                 'dd', 'if=/dev/zero',
                 'seek=%d' % (volume['size'] * units.Gi / block_size_mb),
-                'of=%s' % self.local_path(volume),
+                'of=%s' % self.local_path(share_path),
                 'bs=%dM' % block_size_mb,
                 'count=%d' % block_count,
                 run_as_root=True)
@@ -498,13 +501,12 @@ class NexentaNfsDriver(nfs.NfsDriver):
                                 '%(volume_name)s@%(name)s'), snapshot)
             raise
 
-    def local_path(self, volume):
+    def local_path(self, share_path):
         """Get volume path (mounted locally fs path) for given volume.
 
         :param volume: volume reference
         """
-        nfs_share = volume['provider_location']
-        return os.path.join(self._get_mount_point_for_share(nfs_share),
+        return os.path.join(self._get_mount_point_for_share(share_path),
                             'volume')
 
     def _get_mount_point_for_share(self, nfs_share):
@@ -572,6 +574,11 @@ class NexentaNfsDriver(nfs.NfsDriver):
         allocated = utils.str2size(data['bytesUsed'])
         total = free + allocated
         return total, free, allocated
+
+    def _get_share_path(self, nas_host, share, volume_name):
+        url = 'storage/filesystems/%s' % urllib.parse.quote_plus(
+            '%s/%s' % (share, volume_name))
+        return '%s:%s' % (nas_host, self.nef.get(url)['mountPoint'])
 
     def _get_snapshot_volume(self, snapshot):
         ctxt = context.get_admin_context()
